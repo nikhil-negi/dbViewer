@@ -1,0 +1,9 @@
+.vscode/**
+src/**
+tsconfig.json
+worker/PGNetWorker/**
+worker/publish/*.pdb
+node_modules/**
+!node_modules/vscode-jsonrpc/**
+**/*.map
+.gitignore

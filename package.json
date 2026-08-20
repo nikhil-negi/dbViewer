@@ -1,0 +1,179 @@
+{
+  "name": "pgnet",
+  "displayName": "PostgreSQL Explorer & Debugger",
+  "description": "Browse PostgreSQL objects, run queries, and debug PL/pgSQL routines via a .NET backend.",
+  "version": "0.0.1",
+  "publisher": "Nikhil",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Debuggers"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pgnet",
+          "title": "PostgreSQL",
+          "icon": "$(database)"
+        }
+      ]
+    },
+    "views": {
+      "pgnet": [
+        {
+          "id": "pgnetExplorer",
+          "name": "Explorer",
+          "icon": "$(database)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pgnet.connect",
+        "title": "PGNet: Add Connection",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pgnet.removeConnection",
+        "title": "PGNet: Remove Connection"
+      },
+      {
+        "command": "pgnet.refresh",
+        "title": "PGNet: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "pgnet.runSelectedQuery",
+        "title": "PGNet: Run Query (selection or file)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "pgnet.cancelQuery",
+        "title": "PGNet: Cancel Running Query"
+      },
+      {
+        "command": "pgnet.selectConnection",
+        "title": "PGNet: Select Active Connection"
+      },
+      {
+        "command": "pgnet.debugRoutine",
+        "title": "PGNet: Debug Routine",
+        "icon": "$(debug-alt)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "pgnet.connect",
+          "when": "view == pgnetExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "pgnet.refresh",
+          "when": "view == pgnetExplorer",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "pgnet.removeConnection",
+          "when": "view == pgnetExplorer && viewItem == connection"
+        },
+        {
+          "command": "pgnet.debugRoutine",
+          "when": "view == pgnetExplorer && viewItem == routine",
+          "group": "inline"
+        }
+      ],
+      "editor/title/run": [
+        {
+          "command": "pgnet.runSelectedQuery",
+          "when": "editorLangId == sql || resourceScheme == pg-schema"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "pgnet.runSelectedQuery",
+          "when": "editorLangId == sql || resourceScheme == pg-schema",
+          "group": "pgnet"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "pgnet.runSelectedQuery",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && (editorLangId == sql || resourceScheme == pg-schema)"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "pgsql",
+        "label": "PostgreSQL PL/pgSQL Debugger",
+        "languages": [
+          "sql"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "connection",
+              "routine"
+            ],
+            "properties": {
+              "connection": {
+                "type": "string",
+                "description": "Connection name (as added in the PGNet explorer)"
+              },
+              "routine": {
+                "type": "string",
+                "description": "Schema-qualified routine name, e.g. public.my_func"
+              },
+              "args": {
+                "type": "array",
+                "description": "Argument literals passed to the routine, in order",
+                "default": []
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "pgsql",
+            "request": "launch",
+            "name": "Debug PL/pgSQL routine",
+            "connection": "my-connection",
+            "routine": "public.my_function",
+            "args": []
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "build:ui": "tsc -p ./",
+    "build:worker": "dotnet publish worker/PGNetWorker -c Release -o worker/publish",
+    "build": "npm run build:ui && npm run build:worker",
+    "package": "vsce package --allow-missing-repository",
+    "build-worker": "npm run build:worker",
+    "vscode:prepublish": "npm run build"
+  },
+  "dependencies": {
+    "vscode-jsonrpc": "^8.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.5.0"
+  }
+}

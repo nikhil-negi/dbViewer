@@ -1,0 +1,6 @@
+node_modules/
+out/
+worker/publish/
+worker/**/bin/
+worker/**/obj/
+*.vsix
