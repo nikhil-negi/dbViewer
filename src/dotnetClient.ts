@@ -4,6 +4,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as rpc from 'vscode-jsonrpc/node';
 
+/** File modification time in epoch ms, or null when the file does not exist. */
+function mtimeOrNull(file: string): number | null {
+    try { return fs.statSync(file).mtimeMs; } catch { return null; }
+}
+
 /**
  * Spawns the PGNetWorker .NET process and exposes a JSON-RPC channel over its
  * stdin/stdout (Content-Length header framing, matching StreamJsonRpc's
@@ -44,15 +49,30 @@ export class DotNetClient implements vscode.Disposable {
         this.connection.listen();
     }
 
-    /** Prefer a published binary shipped with the extension; fall back to `dotnet run` for development. */
+    /**
+     * Picks the worker binary to launch. A published build ships with the packaged
+     * extension; a Debug build exists during development. When both are present we take
+     * whichever was built more recently — otherwise a stale `worker/publish/` (e.g. from
+     * an earlier packaging) silently shadows a freshly rebuilt Debug binary, and the
+     * running worker's RPC signatures no longer match what the extension sends. Falls
+     * back to `dotnet run` when neither binary is on disk.
+     */
     private resolveWorker(): { command: string; args: string[]; cwd: string } {
         const exeName = process.platform === 'win32' ? 'PGNetWorker.exe' : 'PGNetWorker';
         const published = path.join(this.extensionPath, 'worker', 'publish', exeName);
-        if (fs.existsSync(published)) {
+        const dll = path.join(this.extensionPath, 'worker', 'PGNetWorker', 'bin', 'Debug', 'net10.0', 'PGNetWorker.dll');
+
+        const publishedTime = mtimeOrNull(published);
+        const dllTime = mtimeOrNull(dll);
+
+        if (publishedTime !== null && (dllTime === null || publishedTime >= dllTime)) {
+            this.output.appendLine(`Using published worker (built ${new Date(publishedTime).toISOString()}).`);
             return { command: published, args: [], cwd: this.extensionPath };
         }
-        const dll = path.join(this.extensionPath, 'worker', 'PGNetWorker', 'bin', 'Debug', 'net10.0', 'PGNetWorker.dll');
-        if (fs.existsSync(dll)) {
+        if (dllTime !== null) {
+            if (publishedTime !== null) {
+                this.output.appendLine('Debug worker is newer than the published one; using Debug build.');
+            }
             return { command: 'dotnet', args: [dll], cwd: this.extensionPath };
         }
         return {

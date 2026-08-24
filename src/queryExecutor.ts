@@ -1,22 +1,25 @@
 import * as vscode from 'vscode';
 import { ConnectionStore } from './connections';
+import { ConnectionContext } from './connectionContext';
 import { QueryChannel, QuerySink, QueryComplete } from './queryChannel';
 import { gridHtml } from './webview/gridHtml';
 import { handleExportMessage } from './exportHelper';
+import { providerInfo } from './providers';
 
-/** Runs editor SQL through the .NET worker and streams rows into a webview grid. */
+/**
+ * Runs editor SQL through the .NET worker and streams rows into a webview grid.
+ * Which server a query lands on comes from the file's connection context, so several
+ * connections can be in play at once without a hidden global "current" connection.
+ */
 export class QueryExecutor {
     private panel: vscode.WebviewPanel | undefined;
     private activeRequestId: string | undefined;
-    private activeConnection: string | undefined;
-    private readonly statusBar: vscode.StatusBarItem;
 
-    constructor(private readonly store: ConnectionStore, private readonly channel: QueryChannel) {
-        this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
-        this.statusBar.command = 'pgnet.selectConnection';
-        this.statusBar.tooltip = 'PGNet: click to switch the active connection';
-        this.updateStatusBar();
-    }
+    constructor(
+        private readonly store: ConnectionStore,
+        private readonly channel: QueryChannel,
+        private readonly context: ConnectionContext,
+    ) {}
 
     async runFromActiveEditor(): Promise<void> {
         // fall back to a visible SQL editor when focus is elsewhere (e.g. the results panel)
@@ -36,21 +39,31 @@ export class QueryExecutor {
             ? selections.map(s => editor.document.getText(s)).join('\n')
             : editor.document.getText();
         if (!sql.trim()) { return; }
-        await this.runSql(sql);
+
+        const connName = await this.context.ensureForDocument(editor.document);
+        if (!connName) { return; }
+        await this.runSql(sql, connName);
     }
 
-    /** Runs arbitrary SQL on the given (or sticky) connection, streaming into the results panel. */
-    async runSql(sql: string, connectionName?: string): Promise<void> {
-        const connName = connectionName ?? await this.pickConnection();
-        if (!connName) { return; }
-        const connStr = await this.store.get(connName);
-        if (!connStr) { return; }
+    /** Runs arbitrary SQL on a named connection, streaming into the results panel. */
+    async runSql(sql: string, connectionName: string): Promise<void> {
+        const resolved = await this.store.resolve(connectionName);
+        if (!resolved) {
+            vscode.window.showErrorMessage(`PGNet: no stored connection string for "${connectionName}".`);
+            return;
+        }
+        const { provider, connStr } = resolved;
 
         this.ensurePanel();
+        this.panel!.title = `PGNet Results — ${connectionName}`;
         const requestId = this.channel.newRequestId('q');
         if (this.activeRequestId) { this.channel.release(this.activeRequestId); }
         this.activeRequestId = requestId;
-        this.post({ type: 'start', reset: true, connection: connName });
+        this.post({
+            type: 'start',
+            reset: true,
+            connection: `${connectionName} (${providerInfo(provider).label})`,
+        });
 
         const sink: QuerySink = {
             onColumns: (columns) => this.post({ type: 'columns', columns }),
@@ -62,59 +75,13 @@ export class QueryExecutor {
                 this.post({ type: 'complete', ...result });
             },
         };
-        await this.channel.run(connStr, sql, requestId, sink);
+        await this.channel.run(provider, connStr, sql, requestId, sink);
     }
 
     async cancel(): Promise<void> {
         if (this.activeRequestId) {
             await this.channel.cancel(this.activeRequestId);
         }
-    }
-
-    /** Returns the sticky session connection, prompting only the first time. */
-    private async pickConnection(): Promise<string | undefined> {
-        const names = this.store.names();
-        if (names.length === 0) {
-            vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
-            return undefined;
-        }
-        if (this.activeConnection && names.includes(this.activeConnection)) {
-            return this.activeConnection;
-        }
-        const picked = names.length === 1
-            ? names[0]
-            : await vscode.window.showQuickPick(names, { placeHolder: 'Run query on which connection?' });
-        if (picked) {
-            this.activeConnection = picked;
-            this.updateStatusBar();
-        }
-        return picked;
-    }
-
-    /** Name of the sticky session connection, if one has been chosen. */
-    getActiveConnection(): string | undefined {
-        return this.activeConnection;
-    }
-
-    /** Manually switch the active connection for this session. */
-    async selectConnection(): Promise<void> {
-        const names = this.store.names();
-        if (names.length === 0) {
-            vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
-            return;
-        }
-        const picked = await vscode.window.showQuickPick(names, {
-            placeHolder: 'Set active PGNet connection',
-        });
-        if (picked) {
-            this.activeConnection = picked;
-            this.updateStatusBar();
-        }
-    }
-
-    private updateStatusBar(): void {
-        this.statusBar.text = `$(database) ${this.activeConnection ?? 'PGNet: no connection'}`;
-        this.statusBar.show();
     }
 
     private post(message: unknown): void {

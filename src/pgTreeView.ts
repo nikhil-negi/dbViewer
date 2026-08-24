@@ -1,20 +1,18 @@
 import * as vscode from 'vscode';
 import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
+import { FolderKind, ProviderId, providerInfo } from './providers';
 
 export type NodeKind = 'connection' | 'schema' | 'folder' | 'table' | 'view' | 'routine' | 'type';
-export type FolderType = 'Tables' | 'Views' | 'Routines' | 'Data Types';
-/** pg_type sub-kinds we surface; mirrors CatalogHandler's TypeKindExpr. */
+/** pg_type sub-kinds we surface; mirrors PostgresProvider's TypeKindExpr. */
 export type TypeKind = 'enum' | 'composite' | 'domain' | 'range' | 'base';
-
-const FOLDERS: readonly FolderType[] = ['Tables', 'Views', 'Routines', 'Data Types'];
 
 /** Optional per-node payload; leaf kinds use the subset that applies to them. */
 export interface PgNodeProps {
     schema?: string;
     objectName?: string;
     oid?: number;
-    folderType?: FolderType;
+    folderKind?: FolderKind;
     routineArgs?: string;
     routineKind?: string;
     typeKind?: TypeKind;
@@ -47,7 +45,7 @@ export class PgNode extends vscode.TreeItem {
     readonly schema?: string;
     readonly objectName?: string;
     readonly oid?: number;
-    readonly folderType?: FolderType;
+    readonly folderKind?: FolderKind;
     readonly routineArgs?: string;
     readonly routineKind?: string;
     readonly typeKind?: TypeKind;
@@ -55,6 +53,7 @@ export class PgNode extends vscode.TreeItem {
     constructor(
         public readonly kind: NodeKind,
         public readonly connName: string,
+        public readonly provider: ProviderId,
         label: string,
         collapsible: vscode.TreeItemCollapsibleState,
         props: PgNodeProps = {},
@@ -63,12 +62,15 @@ export class PgNode extends vscode.TreeItem {
         this.schema = props.schema;
         this.objectName = props.objectName;
         this.oid = props.oid;
-        this.folderType = props.folderType;
+        this.folderKind = props.folderKind;
         this.routineArgs = props.routineArgs;
         this.routineKind = props.routineKind;
         this.typeKind = props.typeKind;
 
-        this.contextValue = kind;
+        // routines only get the Run/Debug buttons on engines that can invoke them
+        this.contextValue = kind === 'routine' && !providerInfo(provider).supportsRunRoutine
+            ? 'routineReadOnly'
+            : kind;
         this.iconPath = new vscode.ThemeIcon(iconFor(kind, props.typeKind));
         if (OPENABLE.includes(kind)) {
             this.command = {
@@ -93,22 +95,29 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
     async getChildren(node?: PgNode): Promise<PgNode[]> {
         try {
             if (!node) {
-                return this.store.names().map(n =>
-                    new PgNode('connection', n, n, vscode.TreeItemCollapsibleState.Collapsed));
+                return this.store.list().map(c => {
+                    const n = new PgNode('connection', c.name, c.provider, c.name,
+                        vscode.TreeItemCollapsibleState.Collapsed);
+                    n.description = providerInfo(c.provider).label;
+                    return n;
+                });
             }
             const connStr = await this.store.get(node.connName);
             if (!connStr) { return []; }
+            const provider = node.provider;
 
             switch (node.kind) {
                 case 'connection': {
-                    const schemas = await this.client.request<{ name: string }[]>('GetSchemas', connStr);
-                    return schemas.map(s => new PgNode('schema', node.connName, s.name,
+                    const schemas = await this.client.request<{ name: string }[]>(
+                        'GetSchemas', provider, connStr);
+                    return schemas.map(s => new PgNode('schema', node.connName, provider, s.name,
                         vscode.TreeItemCollapsibleState.Collapsed, { schema: s.name }));
                 }
                 case 'schema':
-                    return FOLDERS.map(f =>
-                        new PgNode('folder', node.connName, f, vscode.TreeItemCollapsibleState.Collapsed,
-                            { schema: node.schema, folderType: f }));
+                    return providerInfo(provider).folders.map(f =>
+                        new PgNode('folder', node.connName, provider, f.label,
+                            vscode.TreeItemCollapsibleState.Collapsed,
+                            { schema: node.schema, folderKind: f.kind }));
                 case 'folder':
                     return this.folderChildren(node, connStr);
                 default:
@@ -122,22 +131,25 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
 
     private async folderChildren(node: PgNode, connStr: string): Promise<PgNode[]> {
         const schema = node.schema!;
-        switch (node.folderType) {
-            case 'Tables': {
-                const tables = await this.client.request<{ schema: string; name: string }[]>('GetTables', connStr, schema);
-                return tables.map(t => new PgNode('table', node.connName, t.name,
+        const provider = node.provider;
+        switch (node.folderKind) {
+            case 'tables': {
+                const tables = await this.client.request<{ schema: string; name: string }[]>(
+                    'GetTables', provider, connStr, schema);
+                return tables.map(t => new PgNode('table', node.connName, provider, t.name,
                     vscode.TreeItemCollapsibleState.None, { schema, objectName: t.name }));
             }
-            case 'Views': {
-                const views = await this.client.request<{ schema: string; name: string }[]>('GetViews', connStr, schema);
-                return views.map(v => new PgNode('view', node.connName, v.name,
+            case 'views': {
+                const views = await this.client.request<{ schema: string; name: string }[]>(
+                    'GetViews', provider, connStr, schema);
+                return views.map(v => new PgNode('view', node.connName, provider, v.name,
                     vscode.TreeItemCollapsibleState.None, { schema, objectName: v.name }));
             }
-            case 'Data Types': {
+            case 'types': {
                 const types = await this.client.request<{ schema: string; name: string; kind: TypeKind; oid: number }[]>(
-                    'GetTypes', connStr, schema);
+                    'GetTypes', provider, connStr, schema);
                 return types.map(t => {
-                    const n = new PgNode('type', node.connName, t.name,
+                    const n = new PgNode('type', node.connName, provider, t.name,
                         vscode.TreeItemCollapsibleState.None,
                         { schema, objectName: t.name, oid: t.oid, typeKind: t.kind });
                     n.description = t.kind;
@@ -145,10 +157,12 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
                 });
             }
             default: {
-                const routines = await this.client.request<{ schema: string; name: string; kind: string; oid: number; arguments: string }[]>(
-                    'GetRoutines', connStr, schema);
+                const routines = await this.client.request<
+                    { schema: string; name: string; kind: string; oid: number; arguments: string }[]>(
+                    'GetRoutines', provider, connStr, schema);
                 return routines.map(r => {
-                    const n = new PgNode('routine', node.connName, `${r.name}(${r.arguments})`,
+                    const label = r.arguments ? `${r.name}(${r.arguments})` : r.name;
+                    const n = new PgNode('routine', node.connName, provider, label,
                         vscode.TreeItemCollapsibleState.None,
                         { schema, objectName: r.name, oid: r.oid, routineArgs: r.arguments, routineKind: r.kind });
                     n.description = r.kind;

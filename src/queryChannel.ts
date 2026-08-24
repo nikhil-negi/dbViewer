@@ -39,9 +39,11 @@ export class QueryChannel {
         return `${prefix}${++this.seq}`;
     }
 
-    async run(connStr: string, sql: string, requestId: string, sink: QuerySink): Promise<void> {
+    async run(
+        provider: string, connStr: string, sql: string, requestId: string, sink: QuerySink,
+    ): Promise<void> {
         this.sinks.set(requestId, sink);
-        await this.client.requestNoWait('ExecuteQueryStream', connStr, sql, requestId);
+        await this.client.requestNoWait('ExecuteQueryStream', provider, connStr, sql, requestId);
     }
 
     release(requestId: string): void {

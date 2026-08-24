@@ -7,10 +7,9 @@ import { gridHtml } from './webview/gridHtml';
 import { handleExportMessage } from './exportHelper';
 import { openDefinition } from './pgDocumentProvider';
 import { typeDetailSql } from './typeUtils';
+import { ProviderId, quoteIdent } from './providers';
 
 const PAGE_SIZE = 200;
-
-const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;
 
 /**
  * One webview panel per table/view/data type showing paginated rows plus a DDL
@@ -20,6 +19,7 @@ const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;
  */
 interface PanelState {
     panel: vscode.WebviewPanel;
+    provider: ProviderId;
     /** FROM-clause source: a qualified relation, or a parenthesised subquery. */
     source: string;
     orderBy?: string;
@@ -40,11 +40,12 @@ export class TableViewer {
         const existing = this.panels.get(key);
         if (existing) { existing.panel.reveal(); return; }
 
-        const connStr = await this.store.get(node.connName);
-        if (!connStr) {
+        const resolved = await this.store.resolve(node.connName);
+        if (!resolved) {
             vscode.window.showErrorMessage(`PGNet: unknown connection ${node.connName}`);
             return;
         }
+        const { provider, connStr } = resolved;
 
         const title = `${node.schema}.${node.objectName}`;
         const panel = vscode.window.createWebviewPanel(
@@ -52,7 +53,7 @@ export class TableViewer {
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
         panel.webview.html = gridHtml({ mode: 'table', tableName: title });
-        const state: PanelState = { panel, source: sourceFor(node) };
+        const state: PanelState = { panel, provider, source: sourceFor(node) };
         this.panels.set(key, state);
         panel.onDidDispose(() => this.panels.delete(key));
 
@@ -90,16 +91,18 @@ export class TableViewer {
             },
         };
         const order = state.orderBy
-            ? ` ORDER BY ${ident(state.orderBy)} ${state.dir === 'desc' ? 'DESC' : 'ASC'}`
+            ? ` ORDER BY ${quoteIdent(state.provider, state.orderBy)} ${state.dir === 'desc' ? 'DESC' : 'ASC'}`
             : '';
         const sql = `SELECT * FROM ${state.source}${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
-        await this.channel.run(connStr, sql, requestId, sink);
+        await this.channel.run(state.provider, connStr, sql, requestId, sink);
     }
 }
 
 function sourceFor(node: PgNode): string {
+    // data types exist only on Postgres, where their "rows" come from the catalogs
     if (node.kind === 'type') {
         return `(${typeDetailSql(node.schema!, node.objectName!, node.typeKind)}\n) AS pgnet_type_detail`;
     }
-    return `${ident(node.schema!)}.${ident(node.objectName!)}`;
+    const q = (name: string) => quoteIdent(node.provider, name);
+    return `${q(node.schema!)}.${q(node.objectName!)}`;
 }

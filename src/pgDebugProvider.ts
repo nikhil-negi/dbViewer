@@ -188,6 +188,11 @@ class PgDebugAdapter implements vscode.DebugAdapter {
             this.fail(`Unknown connection "${this.config.connection}". Add it in the PGNet explorer.`);
             return;
         }
+        // pldbgapi is a PostgreSQL server extension; no other engine can be debugged
+        if (this.store.provider(this.config.connection) !== 'postgres') {
+            this.fail(`"${this.config.connection}" is not a PostgreSQL connection — PL/pgSQL debugging needs one.`);
+            return;
+        }
         const installed = await this.client.request<boolean>('CheckDebuggerInstalled', connStr);
         if (!installed) {
             this.fail('The pldbgapi extension is not installed on the server. Run: CREATE EXTENSION pldbgapi;');
@@ -198,7 +203,7 @@ class PgDebugAdapter implements vscode.DebugAdapter {
         if (!name) { this.fail('routine must be schema-qualified, e.g. public.my_func'); return; }
 
         const routines = await this.client.request<{ name: string; kind: string; oid: number; arguments: string }[]>(
-            'GetRoutines', connStr, schema);
+            'GetRoutines', 'postgres', connStr, schema);
         const match = routines.find(r => r.name === name);
         if (!match) { this.fail(`Routine ${this.config.routine} not found.`); return; }
         this.funcOid = match.oid;

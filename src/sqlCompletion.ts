@@ -13,6 +13,7 @@ const KIND_MAP: Record<string, vscode.CompletionItemKind> = {
     view: vscode.CompletionItemKind.Interface,
     function: vscode.CompletionItemKind.Function,
     procedure: vscode.CompletionItemKind.Method,
+    dictionary: vscode.CompletionItemKind.Struct,
     enum: vscode.CompletionItemKind.Enum,
     composite: vscode.CompletionItemKind.Class,
     domain: vscode.CompletionItemKind.TypeParameter,
@@ -24,7 +25,8 @@ const KIND_MAP: Record<string, vscode.CompletionItemKind> = {
 const HAS_COLUMNS = new Set(['table', 'view', 'composite']);
 
 /**
- * SQL autocomplete backed by the database catalog of the active connection:
+ * SQL autocomplete backed by the database catalog of the connection bound to the
+ * document being edited:
  * schemas, tables, views, routines, data types everywhere; columns after
  * `table.`, `schema.table.`, a composite type name, or a FROM/JOIN alias.
  */
@@ -34,13 +36,14 @@ export class PgCompletionProvider implements vscode.CompletionItemProvider {
     constructor(
         private readonly client: DotNetClient,
         private readonly store: ConnectionStore,
-        private readonly activeConnection: () => string | undefined,
+        /** Resolves the connection a document runs against. */
+        private readonly connectionFor: (doc: vscode.TextDocument) => string | undefined,
     ) {}
 
     async provideCompletionItems(
         document: vscode.TextDocument, position: vscode.Position,
     ): Promise<vscode.CompletionItem[] | undefined> {
-        const connName = this.activeConnection() ?? this.store.names()[0];
+        const connName = this.connectionFor(document) ?? this.store.names()[0];
         if (!connName) { return undefined; }
         const catalog = await this.getCatalog(connName);
         if (!catalog) { return undefined; }
@@ -66,7 +69,8 @@ export class PgCompletionProvider implements vscode.CompletionItemProvider {
         }
         for (const o of catalog.objects) {
             const it = new vscode.CompletionItem(o.name, KIND_MAP[o.kind] ?? vscode.CompletionItemKind.Value);
-            it.detail = `${o.kind} · ${o.schema}`;
+            // engine built-ins (ClickHouse functions) belong to no schema
+            it.detail = o.schema ? `${o.kind} · ${o.schema}` : o.kind;
             it.sortText = `1${o.name}`;
             items.push(it);
         }
@@ -128,10 +132,11 @@ export class PgCompletionProvider implements vscode.CompletionItemProvider {
     private async getCatalog(connName: string): Promise<CompletionCatalog | undefined> {
         const cached = this.cache.get(connName);
         if (cached && Date.now() - cached.ts < CACHE_TTL_MS) { return cached.catalog; }
-        const connStr = await this.store.get(connName);
-        if (!connStr) { return undefined; }
+        const resolved = await this.store.resolve(connName);
+        if (!resolved) { return undefined; }
         try {
-            const catalog = await this.client.request<CompletionCatalog>('GetCompletionCatalog', connStr);
+            const catalog = await this.client.request<CompletionCatalog>(
+                'GetCompletionCatalog', resolved.provider, resolved.connStr);
             this.cache.set(connName, { catalog, ts: Date.now() });
             return catalog;
         } catch {

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
+import { ConnectionContext } from './connectionContext';
 import { PgTreeViewProvider, PgNode } from './pgTreeView';
 import { PgDocumentProvider, PG_SCHEME, openDefinition } from './pgDocumentProvider';
 import { QueryExecutor } from './queryExecutor';
@@ -9,6 +10,9 @@ import { TableViewer } from './tableViewer';
 import { PgDebugConfigurationProvider, PgDebugAdapterDescriptorFactory } from './pgDebugProvider';
 import { parseRoutineArgs, buildInvokeSql, userArgs } from './routineUtils';
 import { PgCompletionProvider } from './sqlCompletion';
+import { providerInfo } from './providers';
+import { importFromDbeaver, testConnection } from './connectionSetup';
+import { ConnectionEditor } from './connectionEditor';
 
 /**
  * Prompts for a SQL literal per user-suppliable argument (refcursor and OUT
@@ -28,17 +32,51 @@ async function promptRoutineArgs(node: PgNode): Promise<string[] | undefined> {
     return literals;
 }
 
+/** Routine actions only apply to engines that can invoke a routine by name. */
+function requireRunnableRoutine(node?: PgNode): node is PgNode {
+    if (!node || node.kind !== 'routine') {
+        vscode.window.showWarningMessage('PGNet: pick a function/procedure in the explorer.');
+        return false;
+    }
+    if (!providerInfo(node.provider).supportsRunRoutine) {
+        vscode.window.showWarningMessage(
+            `PGNet: running routines is not supported for ${providerInfo(node.provider).label}.`);
+        return false;
+    }
+    return true;
+}
+
+/**
+ * Registers a command, tolerating the id already being taken. That happens when a
+ * second copy of this extension is loaded (a stale VSIX install alongside the
+ * development build): without this, the first collision would abort activate() and
+ * leave every later command unregistered — which looks like "command not found".
+ */
+function registerCommand(
+    context: vscode.ExtensionContext, collisions: string[],
+    id: string, handler: (...args: any[]) => any,
+): void {
+    try {
+        context.subscriptions.push(vscode.commands.registerCommand(id, handler));
+    } catch {
+        collisions.push(id);
+    }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
     const client = new DotNetClient(context.extensionPath);
     const store = new ConnectionStore(context);
+    const connectionContext = new ConnectionContext(context, store);
     const tree = new PgTreeViewProvider(client, store);
     const docs = new PgDocumentProvider(client, store);
     const channel = new QueryChannel(client);
-    const executor = new QueryExecutor(store, channel);
+    const executor = new QueryExecutor(store, channel, connectionContext);
     const tableViewer = new TableViewer(client, store, channel);
+    const editor = new ConnectionEditor(client, store, () => tree.refresh());
 
     context.subscriptions.push(
         client,
+        connectionContext,
         vscode.window.registerTreeDataProvider('pgnetExplorer', tree),
         vscode.workspace.registerTextDocumentContentProvider(PG_SCHEME, docs),
         vscode.debug.registerDebugConfigurationProvider('pgsql', new PgDebugConfigurationProvider()),
@@ -46,77 +84,110 @@ export function activate(context: vscode.ExtensionContext): void {
             new PgDebugAdapterDescriptorFactory(client, store)),
         vscode.languages.registerCompletionItemProvider(
             [{ language: 'sql' }, { scheme: 'pg-schema' }],
-            new PgCompletionProvider(client, store, () => executor.getActiveConnection()),
+            new PgCompletionProvider(client, store, doc => connectionContext.forDocument(doc)),
             '.'),
-
-        vscode.commands.registerCommand('pgnet.connect', async () => {
-            const name = await vscode.window.showInputBox({
-                prompt: 'Connection name', placeHolder: 'local-dev',
-                validateInput: v => v.trim() ? undefined : 'Name is required',
-            });
-            if (!name) { return; }
-            const connStr = await vscode.window.showInputBox({
-                prompt: 'Npgsql connection string',
-                placeHolder: 'Host=localhost;Port=5432;Database=mydb;Username=postgres;Password=...',
-                password: true,
-            });
-            if (!connStr) { return; }
-            const result = await client.request<{ success: boolean; error?: { message: string } }>(
-                'TestConnection', connStr);
-            if (!result.success) {
-                vscode.window.showErrorMessage(`PGNet: connection failed — ${result.error?.message}`);
-                return;
-            }
-            await store.add(name.trim(), connStr);
-            tree.refresh();
-            vscode.window.showInformationMessage(`PGNet: connection "${name}" added.`);
-        }),
-
-        vscode.commands.registerCommand('pgnet.removeConnection', async (node?: PgNode) => {
-            const name = node?.connName ??
-                await vscode.window.showQuickPick(store.names(), { placeHolder: 'Remove which connection?' });
-            if (!name) { return; }
-            await store.remove(name);
-            tree.refresh();
-        }),
-
-        vscode.commands.registerCommand('pgnet.refresh', () => tree.refresh()),
-        vscode.commands.registerCommand('pgnet.openDefinition', (node: PgNode) =>
-            node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node)),
-        vscode.commands.registerCommand('pgnet.runSelectedQuery', () => executor.runFromActiveEditor()),
-        vscode.commands.registerCommand('pgnet.cancelQuery', () => executor.cancel()),
-        vscode.commands.registerCommand('pgnet.selectConnection', () => executor.selectConnection()),
-
-        vscode.commands.registerCommand('pgnet.runRoutine', async (node?: PgNode) => {
-            if (!node || node.kind !== 'routine') {
-                vscode.window.showWarningMessage('PGNet: pick a function/procedure in the explorer.');
-                return;
-            }
-            const literals = await promptRoutineArgs(node);
-            if (literals === undefined) { return; }
-            const parsed = parseRoutineArgs(node.routineArgs ?? '');
-            const { sql } = buildInvokeSql(
-                node.routineKind ?? 'function', node.schema!, node.objectName!, parsed, literals);
-            await executor.runSql(sql, node.connName);
-        }),
-
-        vscode.commands.registerCommand('pgnet.debugRoutine', async (node?: PgNode) => {
-            if (!node || node.kind !== 'routine') {
-                vscode.window.showWarningMessage('PGNet: pick a function/procedure in the explorer.');
-                return;
-            }
-            const args = await promptRoutineArgs(node);
-            if (args === undefined) { return; }
-            await vscode.debug.startDebugging(undefined, {
-                type: 'pgsql',
-                request: 'launch',
-                name: `Debug ${node.schema}.${node.objectName}`,
-                connection: node.connName,
-                routine: `${node.schema}.${node.objectName}`,
-                args,
-            });
-        }),
     );
+
+    const collisions: string[] = [];
+    const command = (id: string, handler: (...args: any[]) => any) =>
+        registerCommand(context, collisions, id, handler);
+
+    command('pgnet.connect', () => editor.openAdd());
+
+    command('pgnet.importDbeaver', async () => {
+        if (await importFromDbeaver(store, connectionContext, names => editor.openEditQueue(names))) {
+            tree.refresh();
+        }
+    });
+
+    command('pgnet.setCredentials', async (node?: PgNode) => {
+        const name = node?.connName ??
+            await vscode.window.showQuickPick(store.names(), { placeHolder: 'Edit which connection?' });
+        if (name) { editor.openEdit(name); }
+    });
+
+    command('pgnet.testConnection', (node?: PgNode) =>
+        testConnection(client, store, node?.connName));
+
+    command('pgnet.removeConnection', async (node?: PgNode) => {
+        const name = node?.connName ??
+            await vscode.window.showQuickPick(store.names(), { placeHolder: 'Remove which connection?' });
+        if (!name) { return; }
+        await store.remove(name);
+        await connectionContext.prune();
+        tree.refresh();
+    });
+
+    command('pgnet.refresh', () => tree.refresh());
+    command('pgnet.openDefinition', (node: PgNode) =>
+        node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node));
+    command('pgnet.runSelectedQuery', () => executor.runFromActiveEditor());
+    command('pgnet.cancelQuery', () => executor.cancel());
+
+    // connection context: per-file binding, plus the fallback for unbound files
+    command('pgnet.setFileConnection', () => connectionContext.setForActiveEditor());
+    command('pgnet.selectConnection', () => connectionContext.setDefault());
+    command('pgnet.useConnectionForFile', async (node?: PgNode) => {
+        const doc = vscode.window.activeTextEditor?.document;
+        if (!node || !doc) {
+            vscode.window.showWarningMessage('PGNet: open a SQL file first.');
+            return;
+        }
+        await connectionContext.bind(doc, node.connName);
+        vscode.window.showInformationMessage(`PGNet: this file now runs on "${node.connName}".`);
+    });
+
+    command('pgnet.runRoutine', async (node?: PgNode) => {
+        if (!requireRunnableRoutine(node)) { return; }
+        const literals = await promptRoutineArgs(node);
+        if (literals === undefined) { return; }
+        const parsed = parseRoutineArgs(node.routineArgs ?? '');
+        const { sql } = buildInvokeSql(
+            node.routineKind ?? 'function', node.schema!, node.objectName!, parsed, literals);
+        await executor.runSql(sql, node.connName);
+    });
+
+    command('pgnet.debugRoutine', async (node?: PgNode) => {
+        if (!requireRunnableRoutine(node)) { return; }
+        if (!providerInfo(node.provider).supportsDebug) {
+            vscode.window.showWarningMessage(
+                'PGNet: debugging is only available for PostgreSQL connections.');
+            return;
+        }
+        const args = await promptRoutineArgs(node);
+        if (args === undefined) { return; }
+        await vscode.debug.startDebugging(undefined, {
+            type: 'pgsql',
+            request: 'launch',
+            name: `Debug ${node.schema}.${node.objectName}`,
+            connection: node.connName,
+            routine: `${node.schema}.${node.objectName}`,
+            args,
+        });
+    });
+
+    if (collisions.length > 0) { warnAboutDuplicateInstall(collisions); }
+}
+
+/**
+ * Every command id we own is already taken, so a second copy of PGNet is loaded —
+ * almost always a VSIX installed from an earlier build sitting alongside the
+ * development build. Both copies contribute view buttons, and whichever registered
+ * first handles the clicks, so commands added since that build appear "not found".
+ */
+function warnAboutDuplicateInstall(collisions: string[]): void {
+    const id = 'nikhil.pgnet';
+    vscode.window.showWarningMessage(
+        `PGNet: ${collisions.length} command(s) were already registered by another copy of this ` +
+        'extension, so this copy is only partly active. Uninstall the duplicate and reload.',
+        'Show installed extension', 'Copy uninstall command',
+    ).then(choice => {
+        if (choice === 'Show installed extension') {
+            void vscode.commands.executeCommand('workbench.extensions.search', `@installed ${id}`);
+        } else if (choice === 'Copy uninstall command') {
+            void vscode.env.clipboard.writeText(`code --uninstall-extension ${id}`);
+        }
+    });
 }
 
 export function deactivate(): void {

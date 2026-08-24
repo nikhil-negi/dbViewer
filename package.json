@@ -1,7 +1,7 @@
 {
-  "name": "pgnet",
-  "displayName": "PostgreSQL Explorer & Debugger",
-  "description": "Browse PostgreSQL objects, run queries, and debug PL/pgSQL routines via a .NET backend.",
+  "name": "dbviewer",
+  "displayName": "PostgreSQL & ClickHouse Explorer",
+  "description": "Browse PostgreSQL and ClickHouse objects, run queries, import DBeaver connections, and debug PL/pgSQL routines via a .NET backend.",
   "version": "0.0.1",
   "publisher": "Nikhil",
   "engines": {
@@ -20,7 +20,7 @@
       "activitybar": [
         {
           "id": "pgnet",
-          "title": "PostgreSQL",
+          "title": "SQL Explorer",
           "icon": "$(database)"
         }
       ]
@@ -29,7 +29,7 @@
       "pgnet": [
         {
           "id": "pgnetExplorer",
-          "name": "Explorer",
+          "name": "Connections",
           "icon": "$(database)"
         }
       ]
@@ -60,7 +60,7 @@
       },
       {
         "command": "pgnet.selectConnection",
-        "title": "PGNet: Select Active Connection"
+        "title": "PGNet: Set Default Connection for Unbound Files"
       },
       {
         "command": "pgnet.debugRoutine",
@@ -71,6 +71,32 @@
         "command": "pgnet.runRoutine",
         "title": "PGNet: Run Routine",
         "icon": "$(play)"
+      },
+      {
+        "command": "pgnet.importDbeaver",
+        "title": "PGNet: Import Connections from DBeaver",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "pgnet.setCredentials",
+        "title": "PGNet: Set Connection Credentials"
+      },
+      {
+        "command": "pgnet.testConnection",
+        "title": "PGNet: Test Connection"
+      },
+      {
+        "command": "pgnet.setFileConnection",
+        "title": "PGNet: Set Connection for This File",
+        "icon": "$(database)"
+      },
+      {
+        "command": "pgnet.useConnectionForFile",
+        "title": "PGNet: Use This Connection for the Active File"
+      },
+      {
+        "command": "pgnet.openDefinition",
+        "title": "PGNet: Open Definition"
       }
     ],
     "menus": {
@@ -78,18 +104,39 @@
         {
           "command": "pgnet.connect",
           "when": "view == pgnetExplorer",
-          "group": "navigation"
+          "group": "navigation@1"
+        },
+        {
+          "command": "pgnet.importDbeaver",
+          "when": "view == pgnetExplorer",
+          "group": "navigation@2"
         },
         {
           "command": "pgnet.refresh",
           "when": "view == pgnetExplorer",
-          "group": "navigation"
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
+          "command": "pgnet.useConnectionForFile",
+          "when": "view == pgnetExplorer && viewItem == connection",
+          "group": "1_context@1"
+        },
+        {
+          "command": "pgnet.testConnection",
+          "when": "view == pgnetExplorer && viewItem == connection",
+          "group": "2_manage@1"
+        },
+        {
+          "command": "pgnet.setCredentials",
+          "when": "view == pgnetExplorer && viewItem == connection",
+          "group": "2_manage@2"
+        },
+        {
           "command": "pgnet.removeConnection",
-          "when": "view == pgnetExplorer && viewItem == connection"
+          "when": "view == pgnetExplorer && viewItem == connection",
+          "group": "2_manage@3"
         },
         {
           "command": "pgnet.runRoutine",
@@ -113,6 +160,16 @@
           "command": "pgnet.runSelectedQuery",
           "when": "editorLangId == sql || resourceScheme == pg-schema",
           "group": "pgnet"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pgnet.openDefinition",
+          "when": "false"
+        },
+        {
+          "command": "pgnet.useConnectionForFile",
+          "when": "false"
         }
       ]
     },
