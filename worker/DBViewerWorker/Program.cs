@@ -1,5 +1,5 @@
-using PGNetWorker.Handlers;
-using PGNetWorker.Debug;
+using DBViewerWorker.Handlers;
+using DBViewerWorker.Debug;
 using StreamJsonRpc;
 
 // JSON-RPC over stdio. IMPORTANT: nothing else may write to stdout.

@@ -1,8 +1,8 @@
 using Npgsql;
-using PGNetWorker.Handlers;
+using DBViewerWorker.Handlers;
 using System.Text;
 
-namespace PGNetWorker.Providers;
+namespace DBViewerWorker.Providers;
 
 /// <summary>PostgreSQL over Npgsql. The reference implementation; supports PL/pgSQL debugging.</summary>
 public sealed class PostgresProvider : IDbProvider

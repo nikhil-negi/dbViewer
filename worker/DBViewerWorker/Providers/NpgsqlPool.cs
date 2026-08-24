@@ -1,6 +1,6 @@
 using Npgsql;
 
-namespace PGNetWorker.Providers;
+namespace DBViewerWorker.Providers;
 
 /// <summary>
 /// Owns one <see cref="NpgsqlDataSource"/> per connection string and hands out pooled

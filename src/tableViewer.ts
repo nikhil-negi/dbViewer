@@ -71,7 +71,7 @@ export class TableViewer {
 
         const title = `${node.schema}.${node.objectName}`;
         const panel = vscode.window.createWebviewPanel(
-            'dbvieweTable', title,
+            'dbviewerTable', title,
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
         panel.webview.html = gridHtml({ mode: 'table', tableName: title, columns: selectable });

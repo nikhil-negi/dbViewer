@@ -1,6 +1,6 @@
-using PGNetWorker.Providers;
+using DBViewerWorker.Providers;
 
-namespace PGNetWorker.Handlers;
+namespace DBViewerWorker.Handlers;
 
 public record RpcError(string Code, string Message, string Severity);
 public record TestConnectionResult(bool Success, string? ServerVersion, RpcError? Error);

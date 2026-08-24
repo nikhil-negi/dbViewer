@@ -1,8 +1,8 @@
-using PGNetWorker.Providers;
+using DBViewerWorker.Providers;
 using StreamJsonRpc;
 using System.Diagnostics;
 
-namespace PGNetWorker.Handlers;
+namespace DBViewerWorker.Handlers;
 
 public record QueryComplete(string RequestId, bool Success, long RowCount, long ElapsedMs, RpcError? Error);
 

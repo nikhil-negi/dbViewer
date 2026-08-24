@@ -1,10 +1,10 @@
-using PGNetWorker.Handlers;
-using PGNetWorker.Sql;
+using DBViewerWorker.Handlers;
+using DBViewerWorker.Sql;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 
-namespace PGNetWorker.Providers;
+namespace DBViewerWorker.Providers;
 
 public class ClickHouseException(string code, string message) : Exception(message)
 {

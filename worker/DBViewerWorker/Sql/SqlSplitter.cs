@@ -1,4 +1,4 @@
-namespace PGNetWorker.Sql;
+namespace DBViewerWorker.Sql;
 
 /// <summary>
 /// Splits a script into individual statements on top-level semicolons, skipping

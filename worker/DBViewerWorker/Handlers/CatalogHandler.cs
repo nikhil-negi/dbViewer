@@ -1,6 +1,6 @@
-using PGNetWorker.Providers;
+using DBViewerWorker.Providers;
 
-namespace PGNetWorker.Handlers;
+namespace DBViewerWorker.Handlers;
 
 /// <summary>
 /// RPC facade over the catalog side of a provider. Every method takes the provider

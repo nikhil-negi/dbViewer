@@ -1,7 +1,7 @@
-using PGNetWorker.Handlers;
+using DBViewerWorker.Handlers;
 using System.Text;
 
-namespace PGNetWorker.Providers;
+namespace DBViewerWorker.Providers;
 
 public record SchemaNode(string Name);
 public record TableNode(string Schema, string Name, string Kind);   // Kind: table | view

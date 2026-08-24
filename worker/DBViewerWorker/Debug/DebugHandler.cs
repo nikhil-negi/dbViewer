@@ -1,8 +1,8 @@
 using Npgsql;
-using PGNetWorker.Handlers;
+using DBViewerWorker.Handlers;
 using StreamJsonRpc;
 
-namespace PGNetWorker.Debug;
+namespace DBViewerWorker.Debug;
 
 public record BreakpointHit(uint FuncOid, int LineNumber, string TargetName);
 public record StackFrame(int Level, string TargetName, uint FuncOid, int LineNumber, string Args);
