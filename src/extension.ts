@@ -82,7 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
         vscode.commands.registerCommand('pgnet.refresh', () => tree.refresh()),
         vscode.commands.registerCommand('pgnet.openDefinition', (node: PgNode) =>
-            node.kind === 'table' || node.kind === 'view' ? tableViewer.open(node) : openDefinition(node)),
+            node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node)),
         vscode.commands.registerCommand('pgnet.runSelectedQuery', () => executor.runFromActiveEditor()),
         vscode.commands.registerCommand('pgnet.cancelQuery', () => executor.cancel()),
         vscode.commands.registerCommand('pgnet.selectConnection', () => executor.selectConnection()),

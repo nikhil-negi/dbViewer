@@ -6,9 +6,27 @@ namespace PGNetWorker.Handlers;
 public record SchemaNode(string Name);
 public record TableNode(string Schema, string Name, string Kind); // Kind: table | view
 public record RoutineNode(string Schema, string Name, string Kind, uint Oid, string Arguments); // Kind: function | procedure
+public record TypeNode(string Schema, string Name, string Kind, uint Oid); // Kind: enum | composite | domain | range | base
 
 public class CatalogHandler
 {
+    /// <summary>
+    /// Restricts pg_type to types worth showing: skips the implicit row types of
+    /// tables/views, the auto-generated array and multirange types, and pseudo-types.
+    /// Expects the pg_type alias to be `t`.
+    /// </summary>
+    private const string UserTypeFilter = """
+              AND t.typtype IN ('b','c','d','e','r')
+              AND (t.typrelid = 0
+                   OR (SELECT c2.relkind FROM pg_class c2 WHERE c2.oid = t.typrelid) = 'c')
+              AND NOT EXISTS (SELECT 1 FROM pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
+        """;
+
+    private const string TypeKindExpr = """
+        CASE t.typtype WHEN 'e' THEN 'enum' WHEN 'c' THEN 'composite'
+                       WHEN 'd' THEN 'domain' WHEN 'r' THEN 'range' ELSE 'base' END
+        """;
+
     public async Task<SchemaNode[]> GetSchemas(string connStr)
     {
         await using var conn = await Open(connStr);
@@ -75,6 +93,27 @@ public class CatalogHandler
         await using var r = await cmd.ExecuteReaderAsync();
         while (await r.ReadAsync())
             list.Add(new RoutineNode(schema, r.GetString(0), r.GetString(1), (uint)r.GetInt64(2), r.GetString(3)));
+        return list.ToArray();
+    }
+
+    /// <summary>User-defined data types (enum, composite, domain, range, base) in a schema.</summary>
+    public async Task<TypeNode[]> GetTypes(string connStr, string schema)
+    {
+        await using var conn = await Open(connStr);
+        var sql = $"""
+            SELECT t.typname, {TypeKindExpr}, t.oid::int8
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = @schema
+            {UserTypeFilter}
+            ORDER BY t.typname;
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("schema", schema);
+        var list = new List<TypeNode>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+            list.Add(new TypeNode(schema, r.GetString(0), r.GetString(1), (uint)r.GetInt64(2)));
         return list.ToArray();
     }
 
@@ -149,7 +188,177 @@ public class CatalogHandler
         return sb.ToString();
     }
 
-    public record CompletionObject(string Schema, string Name, string Kind); // table | view | function | procedure
+    /// <summary>
+    /// Reconstructs CREATE TYPE / CREATE DOMAIN DDL for a user-defined type.
+    /// Postgres has no pg_get_typedef(), so each type kind is rebuilt from the catalogs.
+    /// </summary>
+    public async Task<string> GetTypeDefinition(string connStr, string schema, string name)
+    {
+        await using var conn = await Open(connStr);
+
+        uint oid;
+        string kind;
+        await using (var cmd = new NpgsqlCommand($"""
+            SELECT t.oid::int8, {TypeKindExpr}
+            FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = @s AND t.typname = @n;
+            """, conn))
+        {
+            cmd.Parameters.AddWithValue("s", schema);
+            cmd.Parameters.AddWithValue("n", name);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return $"-- type {schema}.{name} not found";
+            oid = (uint)r.GetInt64(0);
+            kind = r.GetString(1);
+        }
+
+        var qualified = $"{Quote(schema)}.{Quote(name)}";
+        var ddl = kind switch
+        {
+            "enum" => await EnumDdl(conn, oid, qualified),
+            "composite" => await CompositeDdl(conn, oid, qualified),
+            "domain" => await DomainDdl(conn, oid, qualified),
+            "range" => await RangeDdl(conn, oid, qualified),
+            _ => await BaseTypeDdl(conn, oid, qualified),
+        };
+
+        var comment = await Scalar(conn, "SELECT COALESCE(obj_description(@oid::oid, 'pg_type'), '');", oid);
+        if (comment.Length > 0)
+        {
+            var keyword = kind == "domain" ? "DOMAIN" : "TYPE";
+            ddl += $"\n\nCOMMENT ON {keyword} {qualified} IS {Literal(comment)};\n";
+        }
+        return ddl;
+    }
+
+    private static async Task<string> EnumDdl(NpgsqlConnection conn, uint oid, string qualified)
+    {
+        var labels = new List<string>();
+        await using var cmd = new NpgsqlCommand(
+            "SELECT enumlabel FROM pg_enum WHERE enumtypid = @oid::oid ORDER BY enumsortorder;", conn);
+        cmd.Parameters.AddWithValue("oid", (long)oid);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync()) labels.Add("    " + Literal(r.GetString(0)));
+        return $"CREATE TYPE {qualified} AS ENUM (\n{string.Join(",\n", labels)}\n);\n";
+    }
+
+    private static async Task<string> CompositeDdl(NpgsqlConnection conn, uint oid, string qualified)
+    {
+        var attrs = new List<string>();
+        await using var cmd = new NpgsqlCommand("""
+            SELECT a.attname, format_type(a.atttypid, a.atttypmod),
+                   COALESCE((SELECT co.collname FROM pg_collation co
+                             WHERE co.oid = a.attcollation AND co.collname <> 'default'), '')
+            FROM pg_attribute a
+            WHERE a.attrelid = (SELECT typrelid FROM pg_type WHERE oid = @oid::oid)
+              AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum;
+            """, conn);
+        cmd.Parameters.AddWithValue("oid", (long)oid);
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync())
+        {
+            var line = $"    {Quote(r.GetString(0))} {r.GetString(1)}";
+            if (r.GetString(2).Length > 0) line += $" COLLATE {Quote(r.GetString(2))}";
+            attrs.Add(line);
+        }
+        return $"CREATE TYPE {qualified} AS (\n{string.Join(",\n", attrs)}\n);\n";
+    }
+
+    private static async Task<string> DomainDdl(NpgsqlConnection conn, uint oid, string qualified)
+    {
+        var sb = new StringBuilder();
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT format_type(t.typbasetype, t.typtypmod), t.typnotnull, COALESCE(t.typdefault, ''),
+                   COALESCE((SELECT co.collname FROM pg_collation co
+                             WHERE co.oid = t.typcollation AND co.collname <> 'default'), '')
+            FROM pg_type t WHERE t.oid = @oid::oid;
+            """, conn))
+        {
+            cmd.Parameters.AddWithValue("oid", (long)oid);
+            await using var r = await cmd.ExecuteReaderAsync();
+            if (!await r.ReadAsync()) return $"-- domain {qualified} not found";
+            sb.Append($"CREATE DOMAIN {qualified} AS {r.GetString(0)}");
+            if (r.GetString(3).Length > 0) sb.Append($"\n    COLLATE {Quote(r.GetString(3))}");
+            if (r.GetString(2).Length > 0) sb.Append($"\n    DEFAULT {r.GetString(2)}");
+            if (r.GetBoolean(1)) sb.Append("\n    NOT NULL");
+        }
+
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT c.conname, pg_get_constraintdef(c.oid)
+            FROM pg_constraint c WHERE c.contypid = @oid::oid ORDER BY c.conname;
+            """, conn))
+        {
+            cmd.Parameters.AddWithValue("oid", (long)oid);
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                sb.Append($"\n    CONSTRAINT {Quote(r.GetString(0))} {r.GetString(1)}");
+        }
+        sb.AppendLine(";");
+        return sb.ToString();
+    }
+
+    private static async Task<string> RangeDdl(NpgsqlConnection conn, uint oid, string qualified)
+    {
+        await using var cmd = new NpgsqlCommand("""
+            SELECT format_type(r.rngsubtype, NULL::integer),
+                   COALESCE((SELECT opcname FROM pg_opclass WHERE oid = r.rngsubopc), ''),
+                   COALESCE((SELECT collname FROM pg_collation
+                             WHERE oid = r.rngcollation AND collname <> 'default'), ''),
+                   CASE WHEN r.rngcanonical = 0 THEN '' ELSE r.rngcanonical::regproc::text END,
+                   CASE WHEN r.rngsubdiff = 0 THEN '' ELSE r.rngsubdiff::regproc::text END
+            FROM pg_range r WHERE r.rngtypid = @oid::oid;
+            """, conn);
+        cmd.Parameters.AddWithValue("oid", (long)oid);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (!await r.ReadAsync()) return $"-- range type {qualified} not found";
+        var opts = new List<string> { $"    SUBTYPE = {r.GetString(0)}" };
+        if (r.GetString(1).Length > 0) opts.Add($"    SUBTYPE_OPCLASS = {r.GetString(1)}");
+        if (r.GetString(2).Length > 0) opts.Add($"    COLLATION = {Quote(r.GetString(2))}");
+        if (r.GetString(3).Length > 0) opts.Add($"    CANONICAL = {r.GetString(3)}");
+        if (r.GetString(4).Length > 0) opts.Add($"    SUBTYPE_DIFF = {r.GetString(4)}");
+        return $"CREATE TYPE {qualified} AS RANGE (\n{string.Join(",\n", opts)}\n);\n";
+    }
+
+    private static async Task<string> BaseTypeDdl(NpgsqlConnection conn, uint oid, string qualified)
+    {
+        await using var cmd = new NpgsqlCommand("""
+            SELECT t.typinput::regproc::text, t.typoutput::regproc::text, t.typlen, t.typbyval,
+                   t.typalign::text, t.typstorage::text, t.typcategory::text, t.typdelim::text,
+                   COALESCE(t.typdefault, '')
+            FROM pg_type t WHERE t.oid = @oid::oid;
+            """, conn);
+        cmd.Parameters.AddWithValue("oid", (long)oid);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (!await r.ReadAsync()) return $"-- type {qualified} not found";
+        var align = r.GetString(4) switch { "c" => "char", "s" => "int2", "i" => "int4", _ => "double" };
+        var storage = r.GetString(5) switch { "p" => "plain", "e" => "external", "m" => "main", _ => "extended" };
+        var opts = new List<string>
+        {
+            $"    INPUT = {r.GetString(0)}",
+            $"    OUTPUT = {r.GetString(1)}",
+            $"    INTERNALLENGTH = {(r.GetInt16(2) < 0 ? "VARIABLE" : r.GetInt16(2).ToString())}",
+            $"    ALIGNMENT = {align}",
+            $"    STORAGE = {storage}",
+            $"    CATEGORY = {Literal(r.GetString(6))}",
+            $"    DELIMITER = {Literal(r.GetString(7))}",
+        };
+        if (r.GetBoolean(3)) opts.Add("    PASSEDBYVALUE"); // a flag, not a key = value option
+        if (r.GetString(8).Length > 0) opts.Add($"    DEFAULT = {Literal(r.GetString(8))}");
+        return $"CREATE TYPE {qualified} (\n{string.Join(",\n", opts)}\n);\n";
+    }
+
+    private static async Task<string> Scalar(NpgsqlConnection conn, string sql, uint oid)
+    {
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("oid", (long)oid);
+        return (string?)await cmd.ExecuteScalarAsync() ?? "";
+    }
+
+    private static string Quote(string ident) => $"\"{ident.Replace("\"", "\"\"")}\"";
+    private static string Literal(string value) => $"'{value.Replace("'", "''")}'";
+
+    public record CompletionObject(string Schema, string Name, string Kind); // table | view | function | procedure | enum | composite | domain | range | base
     public record CompletionColumn(string Schema, string Table, string Name, string Type);
     public record CompletionCatalog(string[] Schemas, CompletionObject[] Objects, CompletionColumn[] Columns);
 
@@ -168,7 +377,7 @@ public class CatalogHandler
             while (await r.ReadAsync()) schemas.Add(r.GetString(0));
 
         var objects = new List<CompletionObject>();
-        await using (var cmd = new NpgsqlCommand("""
+        await using (var cmd = new NpgsqlCommand($"""
             SELECT table_schema, table_name,
                    CASE table_type WHEN 'VIEW' THEN 'view' ELSE 'table' END
             FROM information_schema.tables
@@ -177,7 +386,12 @@ public class CatalogHandler
             SELECT n.nspname, p.proname,
                    CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END
             FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-            WHERE n.nspname = ANY(@s) AND p.prokind IN ('f','p');
+            WHERE n.nspname = ANY(@s) AND p.prokind IN ('f','p')
+            UNION ALL
+            SELECT n.nspname, t.typname, {TypeKindExpr}
+            FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = ANY(@s)
+            {UserTypeFilter};
             """, conn))
         {
             cmd.Parameters.AddWithValue("s", schemas.ToArray());
@@ -189,7 +403,14 @@ public class CatalogHandler
         var columns = new List<CompletionColumn>();
         await using (var cmd = new NpgsqlCommand("""
             SELECT table_schema, table_name, column_name, data_type
-            FROM information_schema.columns WHERE table_schema = ANY(@s);
+            FROM information_schema.columns WHERE table_schema = ANY(@s)
+            UNION ALL
+            SELECT n.nspname, t.typname, a.attname, format_type(a.atttypid, a.atttypmod)
+            FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            JOIN pg_class c ON c.oid = t.typrelid AND c.relkind = 'c'
+            JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+            WHERE n.nspname = ANY(@s);
             """, conn))
         {
             cmd.Parameters.AddWithValue("s", schemas.ToArray());

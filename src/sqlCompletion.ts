@@ -13,12 +13,20 @@ const KIND_MAP: Record<string, vscode.CompletionItemKind> = {
     view: vscode.CompletionItemKind.Interface,
     function: vscode.CompletionItemKind.Function,
     procedure: vscode.CompletionItemKind.Method,
+    enum: vscode.CompletionItemKind.Enum,
+    composite: vscode.CompletionItemKind.Class,
+    domain: vscode.CompletionItemKind.TypeParameter,
+    range: vscode.CompletionItemKind.TypeParameter,
+    base: vscode.CompletionItemKind.TypeParameter,
 };
+
+/** Object kinds that own columns/attributes reachable via `<name>.`. */
+const HAS_COLUMNS = new Set(['table', 'view', 'composite']);
 
 /**
  * SQL autocomplete backed by the database catalog of the active connection:
- * schemas, tables, views, routines everywhere; columns after `table.`,
- * `schema.table.`, or a FROM/JOIN alias.
+ * schemas, tables, views, routines, data types everywhere; columns after
+ * `table.`, `schema.table.`, a composite type name, or a FROM/JOIN alias.
  */
 export class PgCompletionProvider implements vscode.CompletionItemProvider {
     private readonly cache = new Map<string, { catalog: CompletionCatalog; ts: number }>();
@@ -81,16 +89,16 @@ export class PgCompletionProvider implements vscode.CompletionItemProvider {
                 });
         }
 
-        // 2. table./view. (bare name) -> its columns
+        // 2. table./view./composite type. (bare name) -> its columns
         let target = catalog.objects.find(o =>
-            o.name.toLowerCase() === q && (o.kind === 'table' || o.kind === 'view'));
+            o.name.toLowerCase() === q && HAS_COLUMNS.has(o.kind));
 
         // 3. alias. -> resolve via FROM/JOIN clauses in the document
         if (!target) {
             const aliasTable = this.resolveAlias(document.getText(), q);
             if (aliasTable) {
                 target = catalog.objects.find(o =>
-                    o.name.toLowerCase() === aliasTable && (o.kind === 'table' || o.kind === 'view'));
+                    o.name.toLowerCase() === aliasTable && HAS_COLUMNS.has(o.kind));
             }
         }
         if (!target) { return []; }

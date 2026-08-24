@@ -7,7 +7,7 @@ export const PG_SCHEME = 'pg-schema';
 
 /**
  * Serves object DDL as read-only virtual documents:
- *   pg-schema://<connection>/<schema>/<name>.sql?kind=<table|view|routine>&oid=<oid>
+ *   pg-schema://<connection>/<schema>/<name>.sql?kind=<table|view|routine|type>&oid=<oid>
  */
 export class PgDocumentProvider implements vscode.TextDocumentContentProvider {
     constructor(private readonly client: DotNetClient, private readonly store: ConnectionStore) {}
@@ -28,6 +28,9 @@ export class PgDocumentProvider implements vscode.TextDocumentContentProvider {
             }
             if (kind === 'view') {
                 return await this.client.request<string>('GetViewDefinition', connStr, schema, name);
+            }
+            if (kind === 'type') {
+                return await this.client.request<string>('GetTypeDefinition', connStr, schema, name);
             }
             return await this.client.request<string>('GetTableDefinition', connStr, schema, name);
         } catch (e: any) {

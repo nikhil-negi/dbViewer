@@ -18,7 +18,7 @@ Then press **F5** in VS Code (Run Extension). In dev, the extension finds the De
 ## Usage
 
 1. **Add a connection** — PostgreSQL icon in the activity bar → `+`. Give it a name and an Npgsql connection string (`Host=...;Database=...;Username=...;Password=...`). The string is stored in VS Code SecretStorage; it is validated with `SELECT 1` before saving.
-2. **Browse** — Connection → Schemas → Tables / Views / Routines. Clicking an object opens its DDL (read-only virtual document, `pg-schema://` scheme).
+2. **Browse** — Connection → Schemas → Tables / Views / Routines / Data Types. Clicking a table, view, or data type opens a paginated grid with a **DDL ↗** tab; clicking a routine opens its DDL directly (read-only virtual document, `pg-schema://` scheme). A data type's grid shows its definition detail — enum labels, composite attributes, a domain's base type and constraints, a range's subtype configuration — with the same sorting and CSV/SQL export as table data.
 3. **Run queries** — in any SQL editor, select text (or nothing for the whole file) and press **Cmd+Enter** (or run *PGNet: Run Query*). Results stream into a side panel in 100-row chunks with Data Grid / Messages / Metrics tabs. Cancel with *PGNet: Cancel Running Query*.
 4. **Debug PL/pgSQL** — requires the server extension:
    ```sql
@@ -38,7 +38,8 @@ Then press **F5** in VS Code (Run Extension). In dev, the extension finds the De
 | Method | Purpose |
 |---|---|
 | `TestConnection`, `ListDatabases` | connectivity |
-| `GetSchemas/GetTables/GetViews/GetRoutines` | catalog tree |
-| `GetTableDefinition/GetViewDefinition/GetRoutineDefinition` | DDL for virtual docs |
+| `GetSchemas/GetTables/GetViews/GetRoutines/GetTypes` | catalog tree |
+| `GetTableDefinition/GetViewDefinition/GetRoutineDefinition/GetTypeDefinition` | DDL for virtual docs |
+| `GetCompletionCatalog` | schemas, objects (incl. data types), columns for SQL autocomplete |
 | `ExecuteQueryStream`, `CancelQuery` | streaming execution (notifies `onColumns`, `onDataChunk`, `onNotice`, `onQueryComplete`) |
 | `CheckDebuggerInstalled`, `DebugStart`, `StepOver/StepInto/Continue`, `SetBreakpoint/DropBreakpoint`, `GetStack`, `GetVariables`, `GetSource`, `DebugAbort` | pldbgapi debugging (notifies `onDebugOutput`, `onDebugTerminated`) |

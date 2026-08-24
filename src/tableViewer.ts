@@ -6,15 +6,22 @@ import { PgNode } from './pgTreeView';
 import { gridHtml } from './webview/gridHtml';
 import { handleExportMessage } from './exportHelper';
 import { openDefinition } from './pgDocumentProvider';
+import { typeDetailSql } from './typeUtils';
 
 const PAGE_SIZE = 200;
 
+const ident = (name: string) => `"${name.replace(/"/g, '""')}"`;
+
 /**
- * One webview panel per table/view showing paginated data plus a DDL tab.
- * Scrolling near the bottom asks for the next page (LIMIT/OFFSET).
+ * One webview panel per table/view/data type showing paginated rows plus a DDL
+ * tab. Scrolling near the bottom asks for the next page (LIMIT/OFFSET).
+ * For a data type the "rows" are its definition detail (enum labels, composite
+ * attributes, ...), served from a catalog subquery instead of the relation.
  */
 interface PanelState {
     panel: vscode.WebviewPanel;
+    /** FROM-clause source: a qualified relation, or a parenthesised subquery. */
+    source: string;
     orderBy?: string;
     dir?: 'asc' | 'desc';
 }
@@ -29,7 +36,7 @@ export class TableViewer {
     ) {}
 
     async open(node: PgNode): Promise<void> {
-        const key = `${node.connName}/${node.schema}/${node.objectName}`;
+        const key = `${node.connName}/${node.kind}/${node.schema}/${node.objectName}`;
         const existing = this.panels.get(key);
         if (existing) { existing.panel.reveal(); return; }
 
@@ -39,32 +46,33 @@ export class TableViewer {
             return;
         }
 
+        const title = `${node.schema}.${node.objectName}`;
         const panel = vscode.window.createWebviewPanel(
-            'pgnetTable', `${node.schema}.${node.objectName}`,
+            'pgnetTable', title,
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
-        panel.webview.html = gridHtml({ mode: 'table', tableName: `${node.schema}.${node.objectName}` });
-        const state: PanelState = { panel };
+        panel.webview.html = gridHtml({ mode: 'table', tableName: title });
+        const state: PanelState = { panel, source: sourceFor(node) };
         this.panels.set(key, state);
         panel.onDidDispose(() => this.panels.delete(key));
 
         panel.webview.onDidReceiveMessage(async (msg) => {
             if (msg.type === 'export') { await handleExportMessage(msg); }
-            else if (msg.type === 'loadMore') { await this.loadPage(state, connStr, node, msg.offset, false); }
+            else if (msg.type === 'loadMore') { await this.loadPage(state, connStr, msg.offset, false); }
             else if (msg.type === 'sort') {
                 state.orderBy = msg.column;
                 state.dir = msg.dir === 'desc' ? 'desc' : 'asc';
-                await this.loadPage(state, connStr, node, 0, true); // re-query from the top, sorted
+                await this.loadPage(state, connStr, 0, true); // re-query from the top, sorted
             }
             // open DDL in a real editor so it gets proper SQL syntax highlighting
             else if (msg.type === 'openDdl') { await openDefinition(node); }
         });
 
-        await this.loadPage(state, connStr, node, 0, true);
+        await this.loadPage(state, connStr, 0, true);
     }
 
     private async loadPage(
-        state: PanelState, connStr: string, node: PgNode, offset: number, reset: boolean,
+        state: PanelState, connStr: string, offset: number, reset: boolean,
     ): Promise<void> {
         const panel = state.panel;
         const requestId = this.channel.newRequestId('t');
@@ -82,9 +90,16 @@ export class TableViewer {
             },
         };
         const order = state.orderBy
-            ? ` ORDER BY "${state.orderBy.replace(/"/g, '""')}" ${state.dir === 'desc' ? 'DESC' : 'ASC'}`
+            ? ` ORDER BY ${ident(state.orderBy)} ${state.dir === 'desc' ? 'DESC' : 'ASC'}`
             : '';
-        const sql = `SELECT * FROM "${node.schema}"."${node.objectName}"${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
+        const sql = `SELECT * FROM ${state.source}${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
         await this.channel.run(connStr, sql, requestId, sink);
     }
+}
+
+function sourceFor(node: PgNode): string {
+    if (node.kind === 'type') {
+        return `(${typeDetailSql(node.schema!, node.objectName!, node.typeKind)}\n) AS pgnet_type_detail`;
+    }
+    return `${ident(node.schema!)}.${ident(node.objectName!)}`;
 }
