@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
+import { parseRoutineArgs, buildInvokeSql } from './routineUtils';
 
 interface BreakpointHit { funcOid: number; lineNumber: number; targetName: string; }
 interface DbgStackFrame { level: number; targetName: string; funcOid: number; lineNumber: number; args: string; }
@@ -196,16 +197,16 @@ class PgDebugAdapter implements vscode.DebugAdapter {
         const [schema, name] = String(this.config.routine).split('.');
         if (!name) { this.fail('routine must be schema-qualified, e.g. public.my_func'); return; }
 
-        const routines = await this.client.request<{ name: string; kind: string; oid: number }[]>(
+        const routines = await this.client.request<{ name: string; kind: string; oid: number; arguments: string }[]>(
             'GetRoutines', connStr, schema);
         const match = routines.find(r => r.name === name);
         if (!match) { this.fail(`Routine ${this.config.routine} not found.`); return; }
         this.funcOid = match.oid;
 
-        const args = (this.config.args ?? []).join(', ');
-        const invokeSql = match.kind === 'procedure'
-            ? `CALL ${schema}.${name}(${args});`
-            : `SELECT * FROM ${schema}.${name}(${args});`;
+        // refcursor/OUT args are auto-filled; FETCH ALL is appended per cursor
+        const parsed = parseRoutineArgs(match.arguments);
+        const { sql: invokeSql } = buildInvokeSql(
+            match.kind, schema, name, parsed, (this.config.args ?? []).map(String));
 
         this.event('output', { category: 'console', output: `Debugging: ${invokeSql}\n` });
         const result = await this.client.request<DebugStartResult>('DebugStart', connStr, this.funcOid, invokeSql);

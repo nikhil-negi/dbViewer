@@ -149,6 +149,58 @@ public class CatalogHandler
         return sb.ToString();
     }
 
+    public record CompletionObject(string Schema, string Name, string Kind); // table | view | function | procedure
+    public record CompletionColumn(string Schema, string Table, string Name, string Type);
+    public record CompletionCatalog(string[] Schemas, CompletionObject[] Objects, CompletionColumn[] Columns);
+
+    /// <summary>Everything the SQL autocomplete needs, in one round trip.</summary>
+    public async Task<CompletionCatalog> GetCompletionCatalog(string connStr)
+    {
+        await using var conn = await Open(connStr);
+
+        var schemas = new List<string>();
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT schema_name FROM information_schema.schemata
+            WHERE schema_name NOT IN ('pg_catalog','information_schema')
+              AND schema_name NOT LIKE 'pg_toast%' AND schema_name NOT LIKE 'pg_temp%';
+            """, conn))
+        await using (var r = await cmd.ExecuteReaderAsync())
+            while (await r.ReadAsync()) schemas.Add(r.GetString(0));
+
+        var objects = new List<CompletionObject>();
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT table_schema, table_name,
+                   CASE table_type WHEN 'VIEW' THEN 'view' ELSE 'table' END
+            FROM information_schema.tables
+            WHERE table_schema = ANY(@s)
+            UNION ALL
+            SELECT n.nspname, p.proname,
+                   CASE p.prokind WHEN 'p' THEN 'procedure' ELSE 'function' END
+            FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+            WHERE n.nspname = ANY(@s) AND p.prokind IN ('f','p');
+            """, conn))
+        {
+            cmd.Parameters.AddWithValue("s", schemas.ToArray());
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                objects.Add(new CompletionObject(r.GetString(0), r.GetString(1), r.GetString(2)));
+        }
+
+        var columns = new List<CompletionColumn>();
+        await using (var cmd = new NpgsqlCommand("""
+            SELECT table_schema, table_name, column_name, data_type
+            FROM information_schema.columns WHERE table_schema = ANY(@s);
+            """, conn))
+        {
+            cmd.Parameters.AddWithValue("s", schemas.ToArray());
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                columns.Add(new CompletionColumn(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3)));
+        }
+
+        return new CompletionCatalog(schemas.ToArray(), objects.ToArray(), columns.ToArray());
+    }
+
     private static async Task<NpgsqlConnection> Open(string connStr)
     {
         var conn = new NpgsqlConnection(connStr);

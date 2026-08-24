@@ -66,6 +66,11 @@
         "command": "pgnet.debugRoutine",
         "title": "PGNet: Debug Routine",
         "icon": "$(debug-alt)"
+      },
+      {
+        "command": "pgnet.runRoutine",
+        "title": "PGNet: Run Routine",
+        "icon": "$(play)"
       }
     ],
     "menus": {
@@ -87,9 +92,14 @@
           "when": "view == pgnetExplorer && viewItem == connection"
         },
         {
+          "command": "pgnet.runRoutine",
+          "when": "view == pgnetExplorer && viewItem == routine",
+          "group": "inline@1"
+        },
+        {
           "command": "pgnet.debugRoutine",
           "when": "view == pgnetExplorer && viewItem == routine",
-          "group": "inline"
+          "group": "inline@2"
         }
       ],
       "editor/title/run": [

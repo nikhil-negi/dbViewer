@@ -14,6 +14,8 @@ export class PgNode extends vscode.TreeItem {
         public readonly objectName?: string,
         public readonly oid?: number,
         public readonly folderType?: 'Tables' | 'Views' | 'Routines',
+        public readonly routineArgs?: string,
+        public readonly routineKind?: string,
     ) {
         super(label, collapsible);
         this.contextValue = kind;
@@ -78,7 +80,8 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
                         'GetRoutines', connStr, schema);
                     return routines.map(r => {
                         const n = new PgNode('routine', node.connName, `${r.name}(${r.arguments})`,
-                            vscode.TreeItemCollapsibleState.None, schema, r.name, r.oid);
+                            vscode.TreeItemCollapsibleState.None, schema, r.name, r.oid,
+                            undefined, r.arguments, r.kind);
                         n.description = r.kind;
                         return n;
                     });

@@ -59,9 +59,33 @@ public class DebugHandler(JsonRpc rpc)
             {
                 try
                 {
+                    // multi-statement (e.g. CALL + FETCH ALL for refcursors) runs in one
+                    // implicit transaction; report every result set to the debug console
                     await using var cmd = new NpgsqlCommand(invokeSql, _target) { CommandTimeout = 0 };
-                    var result = await cmd.ExecuteScalarAsync();
-                    await rpc.NotifyAsync("onDebugOutput", $"Routine returned: {result ?? "NULL"}");
+                    cmd.AllResultTypesAreUnknown = true;
+                    await using var reader = await cmd.ExecuteReaderAsync();
+                    var resultSet = 0;
+                    do
+                    {
+                        if (reader.FieldCount == 0) continue;
+                        resultSet++;
+                        var cols = string.Join(" | ", Enumerable.Range(0, reader.FieldCount).Select(reader.GetName));
+                        await rpc.NotifyAsync("onDebugOutput", $"--- result set {resultSet}: {cols}");
+                        var rows = 0;
+                        while (await reader.ReadAsync())
+                        {
+                            rows++;
+                            if (rows <= 200)
+                            {
+                                var vals = string.Join(" | ", Enumerable.Range(0, reader.FieldCount)
+                                    .Select(i => reader.IsDBNull(i) ? "NULL" : reader.GetString(i)));
+                                await rpc.NotifyAsync("onDebugOutput", vals);
+                            }
+                        }
+                        await rpc.NotifyAsync("onDebugOutput",
+                            rows > 200 ? $"({rows} rows, first 200 shown)" : $"({rows} rows)");
+                    } while (await reader.NextResultAsync());
+                    if (resultSet == 0) await rpc.NotifyAsync("onDebugOutput", "Routine completed.");
                 }
                 catch (Exception ex)
                 {
@@ -98,24 +122,32 @@ public class DebugHandler(JsonRpc rpc)
 
     public async Task<StackFrame[]> GetStack()
     {
-        await using var cmd = new NpgsqlCommand($"SELECT level, targetname, func::int8, linenumber, args FROM pldbg_get_stack({_session});", Control());
-        var frames = new List<StackFrame>();
-        await using var r = await cmd.ExecuteReaderAsync();
-        while (await r.ReadAsync())
-            frames.Add(new StackFrame(r.GetInt32(0), r.GetString(1), (uint)r.GetInt64(2), r.GetInt32(3),
-                r.IsDBNull(4) ? "" : r.GetString(4)));
-        return frames.ToArray();
+        try
+        {
+            await using var cmd = new NpgsqlCommand($"SELECT level, targetname, func::int8, linenumber, args FROM pldbg_get_stack({_session});", Control());
+            var frames = new List<StackFrame>();
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                frames.Add(new StackFrame(r.GetInt32(0), r.GetString(1), (uint)r.GetInt64(2), r.GetInt32(3),
+                    r.IsDBNull(4) ? "" : r.GetString(4)));
+            return frames.ToArray();
+        }
+        catch { return []; } // session already ended
     }
 
     public async Task<DbgVariable[]> GetVariables()
     {
-        await using var cmd = new NpgsqlCommand($"SELECT name, varclass, linenumber, isunique, isconst, isnotnull, dtype::regtype::text, value FROM pldbg_get_variables({_session});", Control());
-        var vars = new List<DbgVariable>();
-        await using var r = await cmd.ExecuteReaderAsync();
-        while (await r.ReadAsync())
-            vars.Add(new DbgVariable(r.GetString(0), r.GetChar(1).ToString(), r.GetInt32(2), r.GetBoolean(3),
-                r.GetBoolean(4), r.GetBoolean(5), r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7)));
-        return vars.ToArray();
+        try
+        {
+            await using var cmd = new NpgsqlCommand($"SELECT name, varclass, linenumber, isunique, isconst, isnotnull, dtype::regtype::text, value FROM pldbg_get_variables({_session});", Control());
+            var vars = new List<DbgVariable>();
+            await using var r = await cmd.ExecuteReaderAsync();
+            while (await r.ReadAsync())
+                vars.Add(new DbgVariable(r.GetString(0), r.GetChar(1).ToString(), r.GetInt32(2), r.GetBoolean(3),
+                    r.GetBoolean(4), r.GetBoolean(5), r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7)));
+            return vars.ToArray();
+        }
+        catch { return []; } // session already ended
     }
 
     public async Task<string> GetSource(uint funcOid) =>
@@ -136,7 +168,21 @@ public class DebugHandler(JsonRpc rpc)
         {
             await using var cmd = new NpgsqlCommand($"SELECT func::int8, linenumber, targetname FROM {fn}({_session});", Control());
             cmd.CommandTimeout = 0;
-            await using var r = await cmd.ExecuteReaderAsync();
+            var readerTask = cmd.ExecuteReaderAsync();
+            // stepping past the routine's end completes the target while the control
+            // call is still blocking; detect that and cancel instead of hanging forever
+            var finished = await Task.WhenAny(readerTask, _targetTask ?? Task.Delay(Timeout.Infinite));
+            if (finished != readerTask)
+            {
+                var grace = await Task.WhenAny(readerTask, Task.Delay(750));
+                if (grace != readerTask)
+                {
+                    cmd.Cancel();
+                    try { await readerTask; } catch { /* cancelled */ }
+                    return null; // target finished
+                }
+            }
+            await using var r = await readerTask;
             if (await r.ReadAsync() && !r.IsDBNull(0) && r.GetInt64(0) > 0)
                 return new BreakpointHit((uint)r.GetInt64(0), r.GetInt32(1), r.IsDBNull(2) ? "" : r.GetString(2));
             return null; // target finished
