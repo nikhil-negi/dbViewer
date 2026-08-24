@@ -4,7 +4,7 @@ import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
 import {
     PROVIDERS, ProviderId, isProviderId, providerInfo,
-    fieldsFromConnectionString, connectionStringFromFields, connectionValue, ConnectionFields,
+    fieldsFromConnectionString, connectionStringFromFields, ConnectionFields,
 } from './providers';
 
 /** What the webview form posts back on Test / Save. */
@@ -24,8 +24,8 @@ interface TestResult {
  * setting (type, host, port, database, username, password, …), a paste-to-fill
  * bar for whole connection strings, and an in-place Test button.
  *
- * The stored password never travels to the webview — editing shows an empty
- * password box meaning "keep what is saved"; only a typed value replaces it.
+ * When editing, the saved password is shown (hidden behind a reveal toggle) so it can
+ * be seen and corrected; clearing the box removes the password.
  */
 export class ConnectionEditor {
     private panel: vscode.WebviewPanel | undefined;
@@ -33,7 +33,6 @@ export class ConnectionEditor {
     private pendingLoad: unknown;
     private mode: 'add' | 'edit' = 'add';
     private editing: string | undefined;
-    private hasStoredPassword = false;
     private queue: string[] = [];
     private queueTotal = 0;
 
@@ -71,12 +70,11 @@ export class ConnectionEditor {
             host: '', port: '', database: '', username: '', password: '',
             protocol: '', sslMode: '', others: '',
         };
-        this.hasStoredPassword = false;
         if (mode === 'edit' && name) {
             provider = this.store.provider(name);
+            // the saved password is shown in the edit form (behind a reveal toggle) so it
+            // can be seen and corrected; it stays out of any command/paste history
             fields = fieldsFromConnectionString(await this.store.get(name) ?? '');
-            this.hasStoredPassword = fields.password.length > 0;
-            fields.password = ''; // never sent to the webview
         }
 
         const progress = this.queueTotal > 1
@@ -88,7 +86,6 @@ export class ConnectionEditor {
 
         const load = {
             type: 'load', mode, name: name ?? '', provider, fields,
-            hasPassword: this.hasStoredPassword,
             existingNames: this.store.names(),
             inQueue: this.queue.length > 0 || this.queueTotal > 1,
             progress,
@@ -139,14 +136,11 @@ export class ConnectionEditor {
      * Builds the final connection string. An empty password box while editing
      * means "keep the saved one", so it is re-read from SecretStorage here.
      */
-    private async assemble(form: EditorForm): Promise<{ provider: ProviderId; connStr: string }> {
+    private assemble(form: EditorForm): { provider: ProviderId; connStr: string } {
         const provider: ProviderId = isProviderId(form.provider) ? form.provider : 'postgres';
-        const fields: ConnectionFields = { ...form };
-        if (!fields.password && this.mode === 'edit' && this.hasStoredPassword && this.editing) {
-            const stored = await this.store.get(this.editing);
-            fields.password = (stored && connectionValue(stored, 'Password', 'Pwd')) || '';
-        }
-        return { provider, connStr: connectionStringFromFields(fields) };
+        // the form shows the real password when editing, so its value is authoritative —
+        // an empty box means "no password"
+        return { provider, connStr: connectionStringFromFields({ ...form }) };
     }
 
     private validate(form: EditorForm): string | undefined {
@@ -160,7 +154,7 @@ export class ConnectionEditor {
         const invalid = this.validate(form);
         if (invalid) { this.post({ type: 'testResult', success: false, message: invalid }); return; }
         try {
-            const { provider, connStr } = await this.assemble(form);
+            const { provider, connStr } = this.assemble(form);
             const result = await this.client.request<TestResult>('TestConnection', provider, connStr);
             this.post({
                 type: 'testResult',
@@ -179,7 +173,7 @@ export class ConnectionEditor {
         if (invalid) { this.post({ type: 'saveResult', success: false, message: invalid }); return; }
         const name = this.mode === 'edit' ? this.editing! : form.name.trim();
         try {
-            const { provider, connStr } = await this.assemble(form);
+            const { provider, connStr } = this.assemble(form);
             await this.store.add(name, connStr, provider);
             this.onSaved();
             vscode.window.showInformationMessage(`PGNet: connection "${name}" saved.`);
@@ -253,6 +247,13 @@ function editorHtml(): string {
   #status.err { color: var(--vscode-errorForeground); }
   #nameWarn { grid-column: 2; font-size: 11px; color: var(--vscode-editorWarning-foreground, #cca700);
               display: none; margin-top: -6px; }
+  .pwwrap { display: flex; gap: 6px; align-items: stretch; }
+  .pwwrap input { flex: 1; }
+  .reveal { padding: 0 10px; font-size: 14px; line-height: 1;
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground); }
+  .reveal:hover { background: var(--vscode-button-secondaryHoverBackground); }
+  .reveal.on { outline: 1px solid var(--vscode-focusBorder); }
 </style>
 </head>
 <body>
@@ -288,7 +289,10 @@ function editorHtml(): string {
     <input id="username" placeholder="postgres">
 
     <label for="password">Password</label>
-    <input id="password" type="password">
+    <div class="pwwrap">
+      <input id="password" type="password" autocomplete="off">
+      <button type="button" id="revealPw" class="reveal" title="Show/hide password" aria-label="Show or hide password">👁</button>
+    </div>
 
     <label for="protocol" class="ch-only">Protocol</label>
     <select id="protocol" class="ch-only">
@@ -350,6 +354,13 @@ function editorHtml(): string {
       mode === 'add' && existingNames.includes($('name').value.trim()) ? '' : 'none';
   }
 
+  $('revealPw').addEventListener('click', () => {
+    const pw = $('password');
+    const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    $('revealPw').classList.toggle('on', show);
+    pw.focus();
+  });
   $('provider').addEventListener('change', applyProvider);
   $('name').addEventListener('input', updateNameWarn);
   $('fillBtn').addEventListener('click', () => vscode.postMessage({ type: 'parse', text: $('paste').value }));
@@ -378,9 +389,9 @@ function editorHtml(): string {
       $('name').disabled = m.mode === 'edit';
       $('provider').value = m.provider;
       for (const k of FIELDS) $(k).value = m.fields[k] || '';
-      $('password').value = '';
-      $('password').placeholder = m.hasPassword
-        ? '••••••••  (leave blank to keep the saved password)' : '';
+      $('password').value = m.fields.password || '';
+      $('password').type = 'password';
+      $('revealPw').classList.remove('on');
       $('cancel').textContent = m.inQueue ? 'Skip' : 'Cancel';
       $('paste').value = '';
       applyProvider();

@@ -66,7 +66,13 @@ function registerCommand(
 export function activate(context: vscode.ExtensionContext): void {
     const client = new DotNetClient(context.extensionPath);
     const store = new ConnectionStore(context);
-    const connectionContext = new ConnectionContext(context, store);
+    const connectionContext = new ConnectionContext(context, store,
+        async (connName: string) => {
+            const resolved = await store.resolve(connName);
+            if (!resolved) { return []; }
+            const schemas = await client.request<{ name: string }[]>('GetSchemas', resolved.provider, resolved.connStr);
+            return schemas.map(s => s.name);
+        });
     const tree = new PgTreeViewProvider(client, store);
     const docs = new PgDocumentProvider(client, store);
     const channel = new QueryChannel(client);
@@ -84,7 +90,7 @@ export function activate(context: vscode.ExtensionContext): void {
             new PgDebugAdapterDescriptorFactory(client, store)),
         vscode.languages.registerCompletionItemProvider(
             [{ language: 'sql' }, { scheme: 'pg-schema' }],
-            new PgCompletionProvider(client, store, doc => connectionContext.forDocument(doc)),
+            new PgCompletionProvider(client, store, doc => connectionContext.forDocument(doc)?.connection),
             '.'),
     );
 
@@ -124,16 +130,17 @@ export function activate(context: vscode.ExtensionContext): void {
     command('pgnet.runSelectedQuery', () => executor.runFromActiveEditor());
     command('pgnet.cancelQuery', () => executor.cancel());
 
-    // connection context: per-file binding, plus the fallback for unbound files
-    command('pgnet.setFileConnection', () => connectionContext.setForActiveEditor());
-    command('pgnet.selectConnection', () => connectionContext.setDefault());
+    // connection context: per-file connection + schema shown in the status bar
+    command('pgnet.setFileConnection', () => connectionContext.setConnectionForActiveEditor());
+    command('pgnet.setFileSchema', () => connectionContext.setSchemaForActiveEditor());
+    command('pgnet.selectConnection', () => connectionContext.setConnectionForActiveEditor());
     command('pgnet.useConnectionForFile', async (node?: PgNode) => {
-        const doc = vscode.window.activeTextEditor?.document;
+        const doc = connectionContext.activeSqlEditor()?.document;
         if (!node || !doc) {
             vscode.window.showWarningMessage('PGNet: open a SQL file first.');
             return;
         }
-        await connectionContext.bind(doc, node.connName);
+        await connectionContext.bind(doc, { connection: node.connName });
         vscode.window.showInformationMessage(`PGNet: this file now runs on "${node.connName}".`);
     });
 

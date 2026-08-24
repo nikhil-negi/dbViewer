@@ -239,3 +239,13 @@ export function connectionStringFromFields(f: ConnectionFields): string {
     }
     return buildConnectionString(parts);
 }
+
+/** Returns connStr with its Database set to `db`, preserving all other settings. */
+export function withDatabase(connStr: string, db: string): string {
+    const parts: Record<string, string> = {};
+    for (const [k, v] of parseConnectionString(connStr)) {
+        if (!/^(database|db|initial catalog)$/i.test(k)) { parts[canonicalKey(k)] = v; }
+    }
+    parts.Database = db;
+    return buildConnectionString(parts);
+}

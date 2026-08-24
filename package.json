@@ -91,6 +91,11 @@
         "icon": "$(database)"
       },
       {
+        "command": "pgnet.setFileSchema",
+        "title": "PGNet: Set Schema for This File",
+        "icon": "$(symbol-namespace)"
+      },
+      {
         "command": "pgnet.useConnectionForFile",
         "title": "PGNet: Use This Connection for the Active File"
       },

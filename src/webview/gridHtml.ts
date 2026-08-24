@@ -4,8 +4,8 @@
  * row + column selection, CSV/SQL export, and (table mode) infinite-scroll
  * pagination via 'loadMore' messages to the extension.
  */
-export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string }): string {
-    const cfg = JSON.stringify({ mode: opts.mode, tableName: opts.tableName ?? 'query_result' });
+export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; ddl?: boolean }): string {
+    const cfg = JSON.stringify({ mode: opts.mode, tableName: opts.tableName ?? 'query_result', ddl: opts.ddl !== false });
     return /* html */ `<!DOCTYPE html>
 <html>
 <head>
@@ -87,7 +87,7 @@ export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string }):
     return '';
   }
 
-  if (CFG.mode === 'table') {
+  if (CFG.mode === 'table' && CFG.ddl) {
     const ddltab = document.getElementById('ddltab');
     ddltab.style.display = '';
     ddltab.addEventListener('click', () => vscode.postMessage({ type: 'openDdl' }));

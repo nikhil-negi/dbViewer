@@ -2,8 +2,14 @@ import * as vscode from 'vscode';
 import { ConnectionStore } from './connections';
 import { providerInfo } from './providers';
 
-const FILE_MAP_KEY = 'pgnet.fileConnections';
-const DEFAULT_KEY = 'pgnet.defaultConnection';
+const FILE_MAP_KEY = 'pgnet.fileBindings';
+const LEGACY_MAP_KEY = 'pgnet.fileConnections';
+
+/** A file's execution context: which server, and (optionally) which schema to default to. */
+export interface FileBinding {
+    connection: string;
+    schema?: string;
+}
 
 /** Documents that run SQL, and so have a connection context. */
 function isSqlDocument(doc: vscode.TextDocument | undefined): boolean {
@@ -11,72 +17,93 @@ function isSqlDocument(doc: vscode.TextDocument | undefined): boolean {
 }
 
 /**
- * A DDL document opened from the explorer already names its connection, so queries
- * run inside it belong to that server rather than to the workspace default.
+ * A DDL document opened from the explorer already names its connection in the URI, so
+ * queries run inside it belong to that server.
  */
-function connectionFromUri(uri: vscode.Uri): string | undefined {
+function bindingFromUri(uri: vscode.Uri): FileBinding | undefined {
     if (uri.scheme !== 'pg-schema') { return undefined; }
-    return new URLSearchParams(uri.query).get('conn') ?? uri.authority ?? undefined;
+    const params = new URLSearchParams(uri.query);
+    const connection = params.get('conn') ?? uri.authority;
+    if (!connection) { return undefined; }
+    const schema = uri.path.split('/')[1] || undefined; // pg-schema://conn/<schema>/<obj>.sql
+    return { connection, schema };
 }
 
 /**
- * Remembers which connection each SQL file runs against, so several servers can be
- * open at once without the "which database am I on?" guessing game. The binding is
- * per document URI and persists in workspace state; files with no binding of their
- * own fall back to the workspace default (the last connection explicitly chosen).
+ * Remembers, per SQL file, which connection its queries run on and which schema they
+ * default to — so several servers can be open at once with no hidden "current"
+ * connection, and unqualified table names resolve against the file's schema.
+ *
+ * Each binding is explicit and pinned to the document URI; there is deliberately no
+ * moving workspace-wide default, so opening or binding one file never changes where an
+ * already-open file runs.
  */
 export class ConnectionContext implements vscode.Disposable {
-    private readonly statusBar: vscode.StatusBarItem;
+    private readonly connItem: vscode.StatusBarItem;
+    private readonly schemaItem: vscode.StatusBarItem;
     private readonly disposables: vscode.Disposable[] = [];
     private readonly _onDidChange = new vscode.EventEmitter<void>();
     readonly onDidChange = this._onDidChange.event;
-    /** Keeps the indicator alive while focus sits in the results webview. */
-    private lastSqlDoc: vscode.TextDocument | undefined;
+    /** The SQL editor most recently focused; the target for "run" when focus is elsewhere. */
+    private lastSqlEditor: vscode.TextEditor | undefined;
 
     constructor(
         private readonly ctx: vscode.ExtensionContext,
         private readonly store: ConnectionStore,
+        /** Lists the schemas of a connection (hits the worker); used to populate the schema picker. */
+        private readonly listSchemas: (connName: string) => Promise<string[]>,
     ) {
-        this.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
-        this.statusBar.command = 'pgnet.setFileConnection';
-        this.statusBar.name = 'PGNet Connection';
+        this.connItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 91);
+        this.connItem.command = 'pgnet.setFileConnection';
+        this.connItem.name = 'PGNet Connection';
+        this.schemaItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
+        this.schemaItem.command = 'pgnet.setFileSchema';
+        this.schemaItem.name = 'PGNet Schema';
+
         this.disposables.push(
-            this.statusBar,
-            this._onDidChange,
-            vscode.window.onDidChangeActiveTextEditor(() => this.render()),
+            this.connItem, this.schemaItem, this._onDidChange,
+            vscode.window.onDidChangeActiveTextEditor(e => { this.trackEditor(e); this.render(); }),
             vscode.workspace.onDidOpenTextDocument(() => this.render()),
         );
+        this.trackEditor(vscode.window.activeTextEditor);
         this.render();
     }
 
-    /** The connection a document's queries run on, or undefined if nothing is bound yet. */
-    forDocument(doc: vscode.TextDocument | undefined): string | undefined {
-        const own = this.explicitFor(doc);
-        const name = own ?? this.defaultConnection();
-        return name && this.store.has(name) ? name : undefined;
-    }
-
-    /** Whether the document has a connection of its own rather than inheriting the default. */
-    isExplicit(doc: vscode.TextDocument | undefined): boolean {
-        return this.explicitFor(doc) !== undefined;
-    }
-
-    private explicitFor(doc: vscode.TextDocument | undefined): string | undefined {
-        if (!doc) { return undefined; }
-        const bound = this.bindings()[doc.uri.toString()] ?? connectionFromUri(doc.uri);
-        return bound && this.store.has(bound) ? bound : undefined;
-    }
-
-    defaultConnection(): string | undefined {
-        const name = this.ctx.workspaceState.get<string>(DEFAULT_KEY);
-        return name && this.store.has(name) ? name : undefined;
+    private trackEditor(editor: vscode.TextEditor | undefined): void {
+        if (editor && isSqlDocument(editor.document)) { this.lastSqlEditor = editor; }
     }
 
     /**
-     * Returns the document's connection, asking the user once if it has none.
-     * The answer is remembered for that document.
+     * The SQL editor a "run" should target: the active one if it is SQL, otherwise the
+     * last SQL editor that had focus (so running from the results webview still hits the
+     * file the user was last editing, not an arbitrary visible one).
      */
-    async ensureForDocument(doc: vscode.TextDocument | undefined): Promise<string | undefined> {
+    activeSqlEditor(): vscode.TextEditor | undefined {
+        const active = vscode.window.activeTextEditor;
+        if (active && isSqlDocument(active.document)) { return active; }
+        if (this.lastSqlEditor) {
+            // make sure it is still open
+            const stillOpen = vscode.window.visibleTextEditors.includes(this.lastSqlEditor)
+                || vscode.workspace.textDocuments.includes(this.lastSqlEditor.document);
+            if (stillOpen) { return this.lastSqlEditor; }
+        }
+        return vscode.window.visibleTextEditors.find(e => isSqlDocument(e.document));
+    }
+
+    /** The binding for a document, from its explicit pin or inferred from a pg-schema URI. */
+    forDocument(doc: vscode.TextDocument | undefined): FileBinding | undefined {
+        if (!doc) { return undefined; }
+        const stored = this.bindings()[doc.uri.toString()];
+        const binding = stored ?? bindingFromUri(doc.uri);
+        if (!binding || !this.store.has(binding.connection)) { return undefined; }
+        return binding;
+    }
+
+    /**
+     * Returns the document's binding, prompting for a connection (and offering a schema)
+     * the first time. The choice is pinned to that document.
+     */
+    async ensureForDocument(doc: vscode.TextDocument | undefined): Promise<FileBinding | undefined> {
         const existing = this.forDocument(doc);
         if (existing) { return existing; }
 
@@ -85,53 +112,62 @@ export class ConnectionContext implements vscode.Disposable {
             vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
             return undefined;
         }
-        const picked = names.length === 1 ? names[0] : await this.promptFor(doc);
-        if (!picked) { return undefined; }
-        await this.bind(doc, picked);
-        return picked;
+        const connection = names.length === 1 ? names[0] : await this.pickConnection(doc);
+        if (!connection) { return undefined; }
+        const schema = await this.pickSchema(connection, undefined);
+        const binding: FileBinding = { connection, schema };
+        await this.bind(doc, binding);
+        return binding;
     }
 
-    /** Status-bar / command entry point: rebind the active SQL editor. */
-    async setForActiveEditor(): Promise<void> {
-        const doc = vscode.window.activeTextEditor?.document ?? this.lastSqlDoc;
+    /** Status-bar command: change the active file's connection (then offer a schema). */
+    async setConnectionForActiveEditor(): Promise<void> {
+        const doc = this.activeSqlEditor()?.document;
         if (!isSqlDocument(doc)) {
-            await this.setDefault();
+            vscode.window.showWarningMessage('PGNet: open a SQL file to set its connection.');
             return;
         }
-        const picked = await this.promptFor(doc);
-        if (picked) { await this.bind(doc!, picked); }
+        const connection = await this.pickConnection(doc);
+        if (!connection) { return; }
+        // schema belongs to a connection, so a connection change re-picks the schema
+        const schema = await this.pickSchema(connection, undefined);
+        await this.bind(doc, { connection, schema });
     }
 
-    /** Sets the fallback used by files with no binding of their own. */
-    async setDefault(): Promise<void> {
-        const picked = await this.promptFor(undefined);
-        if (!picked) { return; }
-        await this.ctx.workspaceState.update(DEFAULT_KEY, picked);
-        this.changed();
-    }
-
-    async bind(doc: vscode.TextDocument | undefined, connName: string): Promise<void> {
-        if (doc) {
-            await this.ctx.workspaceState.update(FILE_MAP_KEY, {
-                ...this.bindings(),
-                [doc.uri.toString()]: connName,
-            });
+    /** Status-bar command: change only the schema, keeping the file's connection. */
+    async setSchemaForActiveEditor(): Promise<void> {
+        const doc = this.activeSqlEditor()?.document;
+        if (!isSqlDocument(doc)) {
+            vscode.window.showWarningMessage('PGNet: open a SQL file to set its schema.');
+            return;
         }
-        // the most recent explicit choice also becomes the default for unbound files
-        await this.ctx.workspaceState.update(DEFAULT_KEY, connName);
+        const binding = this.forDocument(doc);
+        if (!binding) {
+            // no connection yet — fall back to the full flow
+            await this.setConnectionForActiveEditor();
+            return;
+        }
+        const schema = await this.pickSchema(binding.connection, binding.schema);
+        await this.bind(doc, { connection: binding.connection, schema });
+    }
+
+    async bind(doc: vscode.TextDocument | undefined, binding: FileBinding): Promise<void> {
+        if (!doc) { return; }
+        const map = { ...this.bindings(), [doc.uri.toString()]: binding };
+        await this.ctx.workspaceState.update(FILE_MAP_KEY, map);
         this.changed();
     }
 
     /**
-     * Binds several files at once without touching the workspace default — used when
-     * importing DBeaver's own per-script bindings. Returns how many were applied.
+     * Binds several files at once (connection only) — used when importing DBeaver's
+     * per-script bindings. Returns how many were applied.
      */
     async bindFiles(entries: { file: string; connection: string }[]): Promise<number> {
         const map = { ...this.bindings() };
         let applied = 0;
         for (const { file, connection } of entries) {
             if (!this.store.has(connection)) { continue; }
-            map[vscode.Uri.file(file).toString()] = connection;
+            map[vscode.Uri.file(file).toString()] = { connection };
             applied++;
         }
         if (applied > 0) {
@@ -144,23 +180,23 @@ export class ConnectionContext implements vscode.Disposable {
     /** Drops bindings for connections that no longer exist. */
     async prune(): Promise<void> {
         const kept = Object.fromEntries(
-            Object.entries(this.bindings()).filter(([, name]) => this.store.has(name)));
+            Object.entries(this.bindings()).filter(([, b]) => this.store.has(b.connection)));
         await this.ctx.workspaceState.update(FILE_MAP_KEY, kept);
         this.changed();
     }
 
-    private async promptFor(doc: vscode.TextDocument | undefined): Promise<string | undefined> {
+    private async pickConnection(doc: vscode.TextDocument | undefined): Promise<string | undefined> {
         const connections = this.store.list();
         if (connections.length === 0) {
             vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
             return undefined;
         }
-        const current = this.forDocument(doc);
+        const current = this.forDocument(doc)?.connection;
         const items = connections.map(c => ({
             label: c.name,
             description: providerInfo(c.provider).label + (c.name === current ? ' · current' : ''),
         }));
-        const target = doc ? shortName(doc.uri) : 'files without their own connection';
+        const target = doc ? shortName(doc.uri) : 'this file';
         const picked = await vscode.window.showQuickPick(items, {
             placeHolder: `Run queries in ${target} on which connection?`,
             matchOnDescription: true,
@@ -168,8 +204,50 @@ export class ConnectionContext implements vscode.Disposable {
         return picked?.label;
     }
 
-    private bindings(): Record<string, string> {
-        return this.ctx.workspaceState.get<Record<string, string>>(FILE_MAP_KEY, {});
+    /**
+     * Picks a schema for the connection. The list is fetched from the server; a
+     * "no default schema" choice clears it (queries then need qualified names).
+     */
+    private async pickSchema(connName: string, current: string | undefined): Promise<string | undefined> {
+        let schemas: string[] = [];
+        try {
+            schemas = await vscode.window.withProgress(
+                { location: vscode.ProgressLocation.Window, title: `PGNet: loading schemas for ${connName}…` },
+                () => this.listSchemas(connName));
+        } catch {
+            // can't reach the server — let the user type one instead of blocking
+            const typed = await vscode.window.showInputBox({
+                prompt: `Default schema for queries on "${connName}" (optional)`,
+                value: current ?? '',
+            });
+            return typed?.trim() || undefined;
+        }
+        if (schemas.length === 0) { return current; }
+
+        const none = { label: '$(circle-slash) No default schema', description: 'use fully-qualified names', schema: undefined as string | undefined };
+        const items = [
+            none,
+            ...schemas.map(s => ({
+                label: s,
+                description: s === current ? 'current' : '',
+                schema: s as string | undefined,
+            })),
+        ];
+        const picked = await vscode.window.showQuickPick(items, {
+            placeHolder: `Default schema for "${connName}" (unqualified tables resolve here)`,
+        });
+        return picked ? picked.schema : current; // Escape keeps the current schema
+    }
+
+    private bindings(): Record<string, FileBinding> {
+        const current = this.ctx.workspaceState.get<Record<string, FileBinding | string>>(FILE_MAP_KEY);
+        if (current) {
+            // tolerate an older shape where the value was a bare connection name
+            return Object.fromEntries(Object.entries(current).map(([k, v]) =>
+                [k, typeof v === 'string' ? { connection: v } : v]));
+        }
+        const legacy = this.ctx.workspaceState.get<Record<string, string>>(LEGACY_MAP_KEY, {});
+        return Object.fromEntries(Object.entries(legacy).map(([k, v]) => [k, { connection: v }]));
     }
 
     private changed(): void {
@@ -178,40 +256,42 @@ export class ConnectionContext implements vscode.Disposable {
     }
 
     /**
-     * Shows the active file's connection in the status bar. Inherited bindings are
-     * marked so it is obvious when a file is only following the default. Focus moving
-     * to a webview (the results grid) leaves no active text editor, so the last SQL
-     * document keeps the indicator rather than making it flicker away.
+     * Renders the connection and schema indicators for the active SQL file. Two adjacent
+     * items read as "🗄 conn ▸ schema"; clicking each changes that facet. Focus moving to
+     * the results webview keeps the last SQL editor's indicator rather than hiding it.
      */
     private render(): void {
-        const active = vscode.window.activeTextEditor?.document;
-        if (active) { this.lastSqlDoc = isSqlDocument(active) ? active : undefined; }
-        const doc = active ?? this.lastSqlDoc;
-        if (!isSqlDocument(doc)) { this.statusBar.hide(); return; }
+        const doc = this.activeSqlEditor()?.document;
+        if (!isSqlDocument(doc)) { this.connItem.hide(); this.schemaItem.hide(); return; }
 
-        const name = this.forDocument(doc);
-        if (!name) {
-            this.statusBar.text = '$(database) Select connection';
-            this.statusBar.tooltip = 'PGNet: no connection bound to this file — click to choose one';
-            this.statusBar.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-            this.statusBar.show();
+        const binding = this.forDocument(doc);
+        const file = shortName(doc!.uri);
+
+        if (!binding) {
+            this.connItem.text = '$(database) Select connection';
+            this.connItem.tooltip = `PGNet: no connection bound to ${file} — click to choose one`;
+            this.connItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+            this.connItem.show();
+            this.schemaItem.hide();
             return;
         }
-        const info = providerInfo(this.store.provider(name));
-        const inherited = !this.isExplicit(doc);
-        this.statusBar.text = `$(database) ${name}${inherited ? ' (default)' : ''}`;
-        this.statusBar.tooltip = new vscode.MarkdownString(
-            [
-                `**${name}** — ${info.label}`,
-                '',
-                inherited
-                    ? `${shortName(doc!.uri)} has no connection of its own and follows the workspace default.`
-                    : `Queries in ${shortName(doc!.uri)} run on **${name}**.`,
-                '',
-                'Click to bind this file to a different connection.',
-            ].join('\n'));
-        this.statusBar.backgroundColor = undefined;
-        this.statusBar.show();
+
+        const info = providerInfo(this.store.provider(binding.connection));
+        this.connItem.text = `$(database) ${binding.connection}`;
+        this.connItem.tooltip = new vscode.MarkdownString(
+            `Queries in **${file}** run on **${binding.connection}** — ${info.label}.\n\nClick to change the connection.`);
+        this.connItem.backgroundColor = undefined;
+        this.connItem.show();
+
+        const schemaWord = info.id === 'clickhouse' ? 'database' : 'schema';
+        this.schemaItem.text = binding.schema
+            ? `$(symbol-namespace) ${binding.schema}`
+            : `$(symbol-namespace) no ${schemaWord}`;
+        this.schemaItem.tooltip = new vscode.MarkdownString(
+            binding.schema
+                ? `Unqualified tables in **${file}** resolve in **${binding.schema}**.\n\nClick to change the ${schemaWord}.`
+                : `No default ${schemaWord} set for **${file}** — use fully-qualified names, or click to pick one.`);
+        this.schemaItem.show();
     }
 
     dispose(): void {
