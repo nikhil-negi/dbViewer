@@ -10,7 +10,7 @@ function mtimeOrNull(file: string): number | null {
 }
 
 /**
- * Spawns the PGNetWorker .NET process and exposes a JSON-RPC channel over its
+ * Spawns the DBViewerWorker .NET process and exposes a JSON-RPC channel over its
  * stdin/stdout (Content-Length header framing, matching StreamJsonRpc's
  * HeaderDelimitedMessageHandler + SystemTextJsonFormatter).
  */
@@ -20,7 +20,7 @@ export class DotNetClient implements vscode.Disposable {
     private readonly output: vscode.OutputChannel;
 
     constructor(private readonly extensionPath: string) {
-        this.output = vscode.window.createOutputChannel('PGNet Worker');
+        this.output = vscode.window.createOutputChannel('DBViewer Worker');
     }
 
     async start(): Promise<void> {
@@ -33,7 +33,7 @@ export class DotNetClient implements vscode.Disposable {
         this.proc.stderr!.on('data', (d: Buffer) => this.output.append(d.toString()));
         this.proc.on('error', (err) => {
             this.output.appendLine(`Worker failed to start: ${err.message}`);
-            vscode.window.showErrorMessage(`PGNet worker failed to start: ${err.message}`);
+            vscode.window.showErrorMessage(`DBViewer worker failed to start: ${err.message}`);
         });
         this.proc.on('exit', (code) => {
             this.output.appendLine(`Worker exited with code ${code}`);
@@ -58,9 +58,9 @@ export class DotNetClient implements vscode.Disposable {
      * back to `dotnet run` when neither binary is on disk.
      */
     private resolveWorker(): { command: string; args: string[]; cwd: string } {
-        const exeName = process.platform === 'win32' ? 'PGNetWorker.exe' : 'PGNetWorker';
+        const exeName = process.platform === 'win32' ? 'DBViewerWorker.exe' : 'DBViewerWorker';
         const published = path.join(this.extensionPath, 'worker', 'publish', exeName);
-        const dll = path.join(this.extensionPath, 'worker', 'PGNetWorker', 'bin', 'Debug', 'net10.0', 'PGNetWorker.dll');
+        const dll = path.join(this.extensionPath, 'worker', 'DBViewerWorker', 'bin', 'Debug', 'net10.0', 'DBViewerWorker.dll');
 
         const publishedTime = mtimeOrNull(published);
         const dllTime = mtimeOrNull(dll);
@@ -77,7 +77,7 @@ export class DotNetClient implements vscode.Disposable {
         }
         return {
             command: 'dotnet',
-            args: ['run', '--project', path.join(this.extensionPath, 'worker', 'PGNetWorker')],
+            args: ['run', '--project', path.join(this.extensionPath, 'worker', 'DBViewerWorker')],
             cwd: this.extensionPath,
         };
     }

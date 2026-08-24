@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import { ProviderId, isProviderId } from './providers';
 
-const LEGACY_NAMES_KEY = 'pgnet.connectionNames';
-const CONNECTIONS_KEY = 'pgnet.connections';
+const LEGACY_NAMES_KEY = 'dbviewer.connectionNames';
+const CONNECTIONS_KEY = 'dbviewer.connections';
 
 export interface ConnectionMeta {
     name: string;
@@ -41,7 +41,7 @@ export class ConnectionStore {
     }
 
     async get(name: string): Promise<string | undefined> {
-        return this.ctx.secrets.get(`pgnet.conn.${name}`);
+        return this.ctx.secrets.get(`dbviewer.conn.${name}`);
     }
 
     /** Resolves both halves at once, since almost every call site needs the pair. */
@@ -51,13 +51,13 @@ export class ConnectionStore {
     }
 
     async add(name: string, connStr: string, provider: ProviderId = 'postgres'): Promise<void> {
-        await this.ctx.secrets.store(`pgnet.conn.${name}`, connStr);
+        await this.ctx.secrets.store(`dbviewer.conn.${name}`, connStr);
         const others = this.list().filter(c => c.name !== name);
         await this.save([...others, { name, provider }]);
     }
 
     async remove(name: string): Promise<void> {
-        await this.ctx.secrets.delete(`pgnet.conn.${name}`);
+        await this.ctx.secrets.delete(`dbviewer.conn.${name}`);
         await this.save(this.list().filter(c => c.name !== name));
     }
 

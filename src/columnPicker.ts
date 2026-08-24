@@ -15,7 +15,7 @@ export function pickColumns(
 ): Promise<string[] | undefined> {
     return new Promise((resolve) => {
         const panel = vscode.window.createWebviewPanel(
-            'pgnetColumnPicker', `Columns — ${title}`,
+            'dbviewerColumnPicker', `Columns — ${title}`,
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
 

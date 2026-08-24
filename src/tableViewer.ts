@@ -51,7 +51,7 @@ export class TableViewer {
 
         const resolved = await this.store.resolve(node.connName);
         if (!resolved) {
-            vscode.window.showErrorMessage(`PGNet: unknown connection ${node.connName}`);
+            vscode.window.showErrorMessage(`DBViewer: unknown connection ${node.connName}`);
             return;
         }
         const { provider, connStr } = resolved;
@@ -71,7 +71,7 @@ export class TableViewer {
 
         const title = `${node.schema}.${node.objectName}`;
         const panel = vscode.window.createWebviewPanel(
-            'pgnetTable', title,
+            'dbvieweTable', title,
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
         panel.webview.html = gridHtml({ mode: 'table', tableName: title, columns: selectable });
@@ -103,7 +103,7 @@ export class TableViewer {
         try {
             all = await this.columnsOf(state.provider, state.connStr, node);
         } catch (e: any) {
-            vscode.window.showErrorMessage(`PGNet: could not load columns — ${e?.message ?? e}`);
+            vscode.window.showErrorMessage(`DBViewer: could not load columns — ${e?.message ?? e}`);
             return;
         }
         if (all.length === 0) { return; }
@@ -173,7 +173,7 @@ export class TableViewer {
 function sourceFor(node: PgNode): string {
     // data types exist only on Postgres, where their "rows" come from the catalogs
     if (node.kind === 'type') {
-        return `(${typeDetailSql(node.schema!, node.objectName!, node.typeKind)}\n) AS pgnet_type_detail`;
+        return `(${typeDetailSql(node.schema!, node.objectName!, node.typeKind)}\n) AS dbviewe_type_detail`;
     }
     const q = (name: string) => quoteIdent(node.provider, name);
     return `${q(node.schema!)}.${q(node.objectName!)}`;

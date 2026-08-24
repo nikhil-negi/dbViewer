@@ -6,8 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <AssemblyName>PGNetWorker</AssemblyName>
-    <RootNamespace>PGNetWorker</RootNamespace>
+    <AssemblyName>DBViewerWorker</AssemblyName>
+    <RootNamespace>DBViewerWorker</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>

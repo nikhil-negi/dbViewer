@@ -75,7 +75,7 @@ export class PgNode extends vscode.TreeItem {
         this.iconPath = new vscode.ThemeIcon(iconFor(kind, props.typeKind));
         if (OPENABLE.includes(kind)) {
             this.command = {
-                command: 'pgnet.openDefinition',
+                command: 'dbviewer.openDefinition',
                 title: 'Open Definition',
                 arguments: [this],
             };
@@ -141,7 +141,7 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
     hasFilter(): boolean { return this.filter.trim().length > 0; }
 
     private afterFilterChange(): void {
-        void vscode.commands.executeCommand('setContext', 'pgnet.filtered', this.hasFilter());
+        void vscode.commands.executeCommand('setContext', 'dbviewer.filtered', this.hasFilter());
         this._onFilter.fire(this.filter);
         this._onDidChange.fire(undefined);
     }
@@ -186,7 +186,7 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
                     return [];
             }
         } catch (e: any) {
-            vscode.window.showErrorMessage(`PGNet: ${e?.message ?? e}`);
+            vscode.window.showErrorMessage(`DBViewer: ${e?.message ?? e}`);
             return [];
         }
     }

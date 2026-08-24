@@ -19,16 +19,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "pgnet",
+          "id": "dbviewer",
           "title": "SQL Explorer",
           "icon": "$(database)"
         }
       ]
     },
     "views": {
-      "pgnet": [
+      "dbviewer": [
         {
-          "id": "pgnetExplorer",
+          "id": "dbExplorer",
           "name": "Connections",
           "icon": "$(database)"
         }
@@ -36,572 +36,572 @@
     },
     "commands": [
       {
-        "command": "pgnet.connect",
-        "title": "PGNet: Add Connection",
+        "command": "dbviewer.connect",
+        "title": "DBViewer: Add Connection",
         "icon": "$(add)"
       },
       {
-        "command": "pgnet.removeConnection",
-        "title": "PGNet: Remove Connection"
+        "command": "dbviewer.removeConnection",
+        "title": "DBViewer: Remove Connection"
       },
       {
-        "command": "pgnet.refresh",
-        "title": "PGNet: Refresh",
+        "command": "dbviewer.refresh",
+        "title": "DBViewer: Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "pgnet.runSelectedQuery",
-        "title": "PGNet: Run Query (selection or file)",
+        "command": "dbviewer.runSelectedQuery",
+        "title": "DBViewer: Run Query (selection or file)",
         "icon": "$(play)"
       },
       {
-        "command": "pgnet.cancelQuery",
-        "title": "PGNet: Cancel Running Query"
+        "command": "dbviewer.cancelQuery",
+        "title": "DBViewer: Cancel Running Query"
       },
       {
-        "command": "pgnet.selectConnection",
-        "title": "PGNet: Set Default Connection for Unbound Files"
+        "command": "dbviewer.selectConnection",
+        "title": "DBViewer: Set Default Connection for Unbound Files"
       },
       {
-        "command": "pgnet.debugRoutine",
-        "title": "PGNet: Debug Routine",
+        "command": "dbviewer.debugRoutine",
+        "title": "DBViewer: Debug Routine",
         "icon": "$(debug-alt)"
       },
       {
-        "command": "pgnet.runRoutine",
-        "title": "PGNet: Run Routine",
+        "command": "dbviewer.runRoutine",
+        "title": "DBViewer: Run Routine",
         "icon": "$(play)"
       },
       {
-        "command": "pgnet.importDbeaver",
-        "title": "PGNet: Import Connections from DBeaver",
+        "command": "dbviewer.importDbeaver",
+        "title": "DBViewer: Import Connections from DBeaver",
         "icon": "$(cloud-download)"
       },
       {
-        "command": "pgnet.setCredentials",
-        "title": "PGNet: Set Connection Credentials"
+        "command": "dbviewer.editCredentials",
+        "title": "Edit Connection Credentials"
       },
       {
-        "command": "pgnet.testConnection",
-        "title": "PGNet: Test Connection"
+        "command": "dbviewer.testConnection",
+        "title": "DBViewer: Test Connection"
       },
       {
-        "command": "pgnet.setFileConnection",
-        "title": "PGNet: Set Connection for This File",
+        "command": "dbviewer.setFileConnection",
+        "title": "DBViewer: Set Connection for This File",
         "icon": "$(database)"
       },
       {
-        "command": "pgnet.setFileSchema",
-        "title": "PGNet: Set Schema for This File",
+        "command": "dbviewer.setFileSchema",
+        "title": "DBViewer: Set Schema for This File",
         "icon": "$(symbol-namespace)"
       },
       {
-        "command": "pgnet.useConnectionForFile",
-        "title": "PGNet: Use This Connection for the Active File"
+        "command": "dbviewer.useConnectionForFile",
+        "title": "DBViewer: Use This Connection for the Active File"
       },
       {
-        "command": "pgnet.openDefinition",
-        "title": "PGNet: Open Definition"
+        "command": "dbviewer.openDefinition",
+        "title": "DBViewer: Open Definition"
       },
       {
-        "command": "pgnet.filterExplorer",
-        "title": "PGNet: Filter Explorer",
+        "command": "dbviewer.filterExplorer",
+        "title": "DBViewer: Filter Explorer",
         "icon": "$(filter)"
       },
       {
-        "command": "pgnet.clearFilter",
-        "title": "PGNet: Clear Explorer Filter",
+        "command": "dbviewer.clearFilter",
+        "title": "DBViewer: Clear Explorer Filter",
         "icon": "$(filter-filled)"
       },
       {
-        "command": "pgnet.filterType",
-        "title": "PGNet: Filter — Type Character"
+        "command": "dbviewer.filterType",
+        "title": "DBViewer: Filter — Type Character"
       },
       {
-        "command": "pgnet.filterBackspace",
-        "title": "PGNet: Filter — Delete Character"
+        "command": "dbviewer.filterBackspace",
+        "title": "DBViewer: Filter — Delete Character"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "pgnet.connect",
-          "when": "view == pgnetExplorer",
+          "command": "dbviewer.connect",
+          "when": "view == dbExplorer",
           "group": "navigation@1"
         },
         {
-          "command": "pgnet.importDbeaver",
-          "when": "view == pgnetExplorer",
+          "command": "dbviewer.importDbeaver",
+          "when": "view == dbExplorer",
           "group": "navigation@2"
         },
         {
-          "command": "pgnet.filterExplorer",
-          "when": "view == pgnetExplorer",
+          "command": "dbviewer.filterExplorer",
+          "when": "view == dbExplorer",
           "group": "navigation@3"
         },
         {
-          "command": "pgnet.clearFilter",
-          "when": "view == pgnetExplorer && pgnet.filtered",
+          "command": "dbviewer.clearFilter",
+          "when": "view == dbExplorer && dbviewer.filtered",
           "group": "navigation@4"
         },
         {
-          "command": "pgnet.refresh",
-          "when": "view == pgnetExplorer",
+          "command": "dbviewer.refresh",
+          "when": "view == dbExplorer",
           "group": "navigation@5"
         }
       ],
       "view/item/context": [
         {
-          "command": "pgnet.useConnectionForFile",
-          "when": "view == pgnetExplorer && viewItem == connection",
+          "command": "dbviewer.useConnectionForFile",
+          "when": "view == dbExplorer && viewItem == connection",
           "group": "1_context@1"
         },
         {
-          "command": "pgnet.testConnection",
-          "when": "view == pgnetExplorer && viewItem == connection",
+          "command": "dbviewer.testConnection",
+          "when": "view == dbExplorer && viewItem == connection",
           "group": "2_manage@1"
         },
         {
-          "command": "pgnet.setCredentials",
-          "when": "view == pgnetExplorer && viewItem == connection",
+          "command": "dbviewer.setCredentials",
+          "when": "view == dbExplorer && viewItem == connection",
           "group": "2_manage@2"
         },
         {
-          "command": "pgnet.removeConnection",
-          "when": "view == pgnetExplorer && viewItem == connection",
+          "command": "dbviewer.removeConnection",
+          "when": "view == dbExplorer && viewItem == connection",
           "group": "2_manage@3"
         },
         {
-          "command": "pgnet.runRoutine",
-          "when": "view == pgnetExplorer && viewItem == routine",
+          "command": "dbviewer.runRoutine",
+          "when": "view == dbExplorer && viewItem == routine",
           "group": "inline@1"
         },
         {
-          "command": "pgnet.debugRoutine",
-          "when": "view == pgnetExplorer && viewItem == routine",
+          "command": "dbviewer.debugRoutine",
+          "when": "view == dbExplorer && viewItem == routine",
           "group": "inline@2"
         }
       ],
       "editor/title/run": [
         {
-          "command": "pgnet.runSelectedQuery",
+          "command": "dbviewer.runSelectedQuery",
           "when": "editorLangId == sql || resourceScheme == pg-schema"
         }
       ],
       "editor/context": [
         {
-          "command": "pgnet.runSelectedQuery",
+          "command": "dbviewer.runSelectedQuery",
           "when": "editorLangId == sql || resourceScheme == pg-schema",
-          "group": "pgnet"
+          "group": "dbviewer"
         }
       ],
       "commandPalette": [
         {
-          "command": "pgnet.openDefinition",
+          "command": "dbviewer.openDefinition",
           "when": "false"
         },
         {
-          "command": "pgnet.useConnectionForFile",
+          "command": "dbviewer.useConnectionForFile",
           "when": "false"
         },
         {
-          "command": "pgnet.filterType",
+          "command": "dbviewer.filterType",
           "when": "false"
         },
         {
-          "command": "pgnet.filterBackspace",
+          "command": "dbviewer.filterBackspace",
           "when": "false"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "pgnet.runSelectedQuery",
+        "command": "dbviewer.runSelectedQuery",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
         "when": "editorTextFocus && (editorLangId == sql || resourceScheme == pg-schema)"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "a",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "a"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+a",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "a"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "b",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "b"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+b",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "b"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "c",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "c"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+c",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "c"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "d",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "d"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+d",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "d"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "e",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "e"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+e",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "e"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "f",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "f"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+f",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "f"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "g",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "g"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+g",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "g"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "h",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "h"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+h",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "h"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "i",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "i"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+i",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "i"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "j",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "j"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+j",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "j"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "k",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "k"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+k",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "k"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "l",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "l"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+l",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "l"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "m",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "m"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+m",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "m"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "n",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "n"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+n",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "n"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "o",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "o"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+o",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "o"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "p",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "p"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+p",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "p"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "q",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "q"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+q",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "q"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "r",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "r"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+r",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "r"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "s",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "s"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+s",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "s"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "t",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "t"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+t",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "t"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "u",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "u"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+u",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "u"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "v",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "v"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+v",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "v"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "w",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "w"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+w",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "w"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "x",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "x"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+x",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "x"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "y",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "y"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+y",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "y"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "z",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "z"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "shift+z",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "z"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "0",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "0"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "1",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "1"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "2",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "2"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "3",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "3"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "4",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "4"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "5",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "5"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "6",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "6"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "7",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "7"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "8",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "8"
       },
       {
-        "command": "pgnet.filterType",
+        "command": "dbviewer.filterType",
         "key": "9",
-        "when": "focusedView == pgnetExplorer",
+        "when": "focusedView == dbExplorer",
         "args": "9"
       },
       {
-        "command": "pgnet.filterBackspace",
+        "command": "dbviewer.filterBackspace",
         "key": "backspace",
-        "when": "focusedView == pgnetExplorer && pgnet.filtered"
+        "when": "focusedView == dbExplorer && dbviewer.filtered"
       },
       {
-        "command": "pgnet.clearFilter",
+        "command": "dbviewer.clearFilter",
         "key": "escape",
-        "when": "focusedView == pgnetExplorer && pgnet.filtered"
+        "when": "focusedView == dbExplorer && dbviewer.filtered"
       }
     ],
     "debuggers": [
@@ -620,7 +620,7 @@
             "properties": {
               "connection": {
                 "type": "string",
-                "description": "Connection name (as added in the PGNet explorer)"
+                "description": "Connection name (as added in the DBViewer explorer)"
               },
               "routine": {
                 "type": "string",
@@ -651,7 +651,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "build:ui": "tsc -p ./",
-    "build:worker": "dotnet publish worker/PGNetWorker -c Release -o worker/publish",
+    "build:worker": "dotnet publish worker/DBViewerWorker -c Release -o worker/publish",
     "build": "npm run build:ui && npm run build:worker",
     "package": "vsce package --allow-missing-repository",
     "build-worker": "npm run build:worker",

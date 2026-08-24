@@ -98,7 +98,7 @@ export class ConnectionEditor {
         if (this.panel) { return; }
         this.ready = false;
         this.panel = vscode.window.createWebviewPanel(
-            'pgnetConnectionEditor', 'Connection',
+            'dbviewerConnectionEditor', 'Connection',
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
             { enableScripts: true, retainContextWhenHidden: true });
         this.panel.webview.html = editorHtml();
@@ -114,6 +114,8 @@ export class ConnectionEditor {
                     if (this.pendingLoad) { this.post(this.pendingLoad); this.pendingLoad = undefined; }
                     break;
                 case 'parse': this.fillFromString(String(msg.text ?? '')); break;
+                // live preview: assemble the exact string that would be saved
+                case 'preview': this.post({ type: 'connstr', value: this.assemble(msg.form as EditorForm).connStr }); break;
                 case 'test': await this.test(msg.form as EditorForm); break;
                 case 'save': await this.save(msg.form as EditorForm); break;
                 case 'cancel': this.advanceOrClose(); break;
@@ -176,7 +178,7 @@ export class ConnectionEditor {
             const { provider, connStr } = this.assemble(form);
             await this.store.add(name, connStr, provider);
             this.onSaved();
-            vscode.window.showInformationMessage(`PGNet: connection "${name}" saved.`);
+            vscode.window.showInformationMessage(`DBViewer: connection "${name}" saved.`);
             this.advanceOrClose();
         } catch (e: any) {
             this.post({ type: 'saveResult', success: false, message: e?.message ?? String(e) });
@@ -254,6 +256,15 @@ function editorHtml(): string {
             color: var(--vscode-button-secondaryForeground); }
   .reveal:hover { background: var(--vscode-button-secondaryHoverBackground); }
   .reveal.on { outline: 1px solid var(--vscode-focusBorder); }
+  .connstr { margin-top: 18px; }
+  .connstr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .connstr-head label { text-align: left; font-size: 12px; opacity: 0.9; }
+  .tiny { padding: 2px 8px; font-size: 11px; }
+  #connstr { width: 100%; box-sizing: border-box; resize: vertical; font-size: 12px;
+             font-family: var(--vscode-editor-font-family); padding: 6px 8px; border-radius: 3px;
+             color: var(--vscode-input-foreground); background: var(--vscode-input-background);
+             border: 1px solid var(--vscode-input-border, transparent); outline: none;
+             word-break: break-all; opacity: 0.85; }
 </style>
 </head>
 <body>
@@ -312,6 +323,15 @@ function editorHtml(): string {
     <input id="others" placeholder="key=value;key2=value2  (optional)">
   </div>
 
+  <div class="connstr">
+    <div class="connstr-head">
+      <label for="connstr">Connection string</label>
+      <button type="button" class="secondary tiny" id="copyConnstr">Copy</button>
+    </div>
+    <textarea id="connstr" readonly rows="2" spellcheck="false"
+              title="The exact connection string that will be saved (includes the password)"></textarea>
+  </div>
+
   <div class="actions">
     <button class="secondary" id="test">Test Connection</button>
     <div class="spacer"></div>
@@ -333,6 +353,9 @@ function editorHtml(): string {
     for (const k of FIELDS) f[k] = $(k).value;
     return f;
   }
+
+  // ask the host to assemble the exact string that would be saved, and show it
+  function refreshConnstr() { vscode.postMessage({ type: 'preview', form: form() }); }
 
   function applyProvider() {
     const ch = $('provider').value === 'clickhouse';
@@ -361,8 +384,15 @@ function editorHtml(): string {
     $('revealPw').classList.toggle('on', show);
     pw.focus();
   });
-  $('provider').addEventListener('change', applyProvider);
+  $('provider').addEventListener('change', () => { applyProvider(); refreshConnstr(); });
   $('name').addEventListener('input', updateNameWarn);
+  // any field edit updates the generated connection string live
+  for (const k of FIELDS) $(k).addEventListener('input', refreshConnstr);
+  $('copyConnstr').addEventListener('click', () => {
+    const el = $('connstr'); el.select();
+    navigator.clipboard?.writeText(el.value).then(
+      () => status('Connection string copied.', 'ok'), () => {});
+  });
   $('fillBtn').addEventListener('click', () => vscode.postMessage({ type: 'parse', text: $('paste').value }));
   $('paste').addEventListener('keydown', e => {
     if (e.key === 'Enter') vscode.postMessage({ type: 'parse', text: $('paste').value });
@@ -396,13 +426,17 @@ function editorHtml(): string {
       $('paste').value = '';
       applyProvider();
       updateNameWarn();
+      refreshConnstr();
       status('');
       ($('name').disabled ? $('host') : $('name')).focus();
     } else if (m.type === 'fill') {
       for (const k of FIELDS) { if (m.fields[k]) $(k).value = m.fields[k]; }
       if (m.provider) $('provider').value = m.provider;
       applyProvider();
+      refreshConnstr();
       status('Form filled from the pasted string.', 'ok');
+    } else if (m.type === 'connstr') {
+      $('connstr').value = m.value || '';
     } else if (m.type === 'testResult') {
       $('test').disabled = false;
       status(m.message, m.success ? 'ok' : 'err');

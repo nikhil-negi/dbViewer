@@ -44,7 +44,7 @@ export class QueryExecutor {
     async runFromActiveEditor(): Promise<void> {
         const editor = this.context.activeSqlEditor();
         if (!editor) {
-            vscode.window.showWarningMessage('PGNet: open a SQL file to run a query.');
+            vscode.window.showWarningMessage('DBViewer: open a SQL file to run a query.');
             return;
         }
         // run only the selected text; supports multi-cursor (selections joined in
@@ -66,7 +66,7 @@ export class QueryExecutor {
     async run(sql: string, binding: FileBinding): Promise<void> {
         const resolved = await this.store.resolve(binding.connection);
         if (!resolved) {
-            vscode.window.showErrorMessage(`PGNet: no stored connection string for "${binding.connection}".`);
+            vscode.window.showErrorMessage(`DBViewer: no stored connection string for "${binding.connection}".`);
             return;
         }
         const { provider, connStr } = resolved;
@@ -79,14 +79,14 @@ export class QueryExecutor {
                 label: `${binding.connection}${binding.schema ? ' · ' + binding.schema : ''}`,
             };
             this.ensurePanel(true);
-            this.panel!.title = `PGNet Results — ${this.page.label}`;
+            this.panel!.title = `DBViewer Results — ${this.page.label}`;
             await this.loadPage(0, true);
         } else {
             // full run: writes, DDL, multi-statement scripts
             this.page = undefined;
             const applied = this.applySchema(provider, connStr, binding.schema, sql);
             this.ensurePanel(false);
-            this.panel!.title = `PGNet Results — ${binding.connection}`;
+            this.panel!.title = `DBViewer Results — ${binding.connection}`;
             await this.stream(provider, applied.connStr, applied.sql, {
                 banner: `${binding.connection} (${providerInfo(provider).label})`,
             });
@@ -123,7 +123,7 @@ export class QueryExecutor {
         const order = p.orderBy
             ? ` ORDER BY ${quoteIdent(p.provider, p.orderBy)} ${p.dir === 'desc' ? 'DESC' : 'ASC'}`
             : '';
-        const wrapped = `SELECT * FROM (\n${p.base}\n) AS pgnet_q${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
+        const wrapped = `SELECT * FROM (\n${p.base}\n) AS dbviewer_q${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
         const applied = this.applySchema(p.provider, p.connStr, p.schema, wrapped);
         await this.stream(p.provider, applied.connStr, applied.sql, {
             reset,
@@ -179,7 +179,7 @@ export class QueryExecutor {
         }
         this.panelMode = wantMode;
         this.panel = vscode.window.createWebviewPanel(
-            'pgnetResults', 'PGNet Results', { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+            'dbviewerResults', 'DBViewer Results', { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true });
         this.panel.onDidDispose(() => { this.panel = undefined; this.panelMode = undefined; });
         // paginated results reuse the table grid (infinite scroll + sort) but have no DDL tab

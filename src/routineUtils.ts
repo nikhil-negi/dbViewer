@@ -56,7 +56,7 @@ export function buildInvokeSql(
     for (const a of args) {
         if (a.mode === 'OUT') { continue; } // not passed in CALL/SELECT arg lists
         if (a.isRefcursor) {
-            const cname = `pgnet_cur_${cursorNames.length + 1}`;
+            const cname = `dbviewer_cur_${cursorNames.length + 1}`;
             cursorNames.push(cname);
             literals.push(`'${cname}'`);
         } else {

@@ -23,7 +23,7 @@ export async function importFromDbeaver(
     editCredentials: (names: string[]) => void,
 ): Promise<boolean> {
     const scan = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'PGNet: scanning DBeaver configuration...' },
+        { location: vscode.ProgressLocation.Notification, title: 'DBViewer: scanning DBeaver configuration...' },
         () => scanDbeaver());
 
     if (scan.connections.length === 0) {
@@ -31,7 +31,7 @@ export async function importFromDbeaver(
             ? 'No DBeaver workspace was found in the usual locations.'
             : `Read ${scan.sources.length} config file(s) but found no PostgreSQL or ClickHouse data sources.`;
         const skippedNote = scan.skipped.length ? ` ${scan.skipped.length} data source(s) use unsupported engines.` : '';
-        vscode.window.showWarningMessage(`PGNet: nothing to import. ${detail}${skippedNote}`);
+        vscode.window.showWarningMessage(`DBViewer: nothing to import. ${detail}${skippedNote}`);
         return false;
     }
 
@@ -59,7 +59,7 @@ export async function importFromDbeaver(
     await importScriptBindings(context, scan, new Set(picked.map(p => p.conn.name)));
 
     const missing = picked.map(p => p.conn).filter(c => !c.password);
-    const summary = `PGNet: imported ${picked.length} connection(s) from DBeaver.`;
+    const summary = `DBViewer: imported ${picked.length} connection(s) from DBeaver.`;
     if (missing.length === 0) {
         vscode.window.showInformationMessage(summary);
         return true;
@@ -86,12 +86,12 @@ async function importScriptBindings(
     const usable = scan.bindings.filter(b => imported.has(b.connection));
     if (usable.length === 0) { return; }
     const answer = await vscode.window.showInformationMessage(
-        `PGNet: DBeaver also remembers a connection for ${usable.length} script file(s). Apply those too?`,
+        `DBViewer: DBeaver also remembers a connection for ${usable.length} script file(s). Apply those too?`,
         'Apply', 'Skip');
     if (answer !== 'Apply') { return; }
     const applied = await context.bindFiles(usable);
     vscode.window.showInformationMessage(
-        `PGNet: bound ${applied} script file(s) to their DBeaver connection.`);
+        `DBViewer: bound ${applied} script file(s) to their DBeaver connection.`);
 }
 
 /** Test Connection command: verify a stored connection and report the server version. */
@@ -100,16 +100,16 @@ export async function testConnection(client: DotNetClient, store: ConnectionStor
     if (!target) { return; }
     const resolved = await store.resolve(target);
     if (!resolved) {
-        vscode.window.showErrorMessage(`PGNet: no stored connection string for "${target}".`);
+        vscode.window.showErrorMessage(`DBViewer: no stored connection string for "${target}".`);
         return;
     }
     const result = await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `PGNet: testing "${target}"...` },
+        { location: vscode.ProgressLocation.Notification, title: `DBViewer: testing "${target}"...` },
         () => client.request<TestResult>('TestConnection', resolved.provider, resolved.connStr));
     if (result.success) {
         vscode.window.showInformationMessage(
-            `PGNet: "${target}" is reachable (${providerInfo(resolved.provider).label} ${result.serverVersion ?? ''}).`.trim());
+            `DBViewer: "${target}" is reachable (${providerInfo(resolved.provider).label} ${result.serverVersion ?? ''}).`.trim());
     } else {
-        vscode.window.showErrorMessage(`PGNet: "${target}" failed — ${result.error?.message}`);
+        vscode.window.showErrorMessage(`DBViewer: "${target}" failed — ${result.error?.message}`);
     }
 }

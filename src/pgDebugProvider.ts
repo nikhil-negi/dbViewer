@@ -23,7 +23,7 @@ export class PgDebugConfigurationProvider implements vscode.DebugConfigurationPr
         }
         if (!config.connection || !config.routine) {
             vscode.window.showErrorMessage(
-                'PGNet debug configuration needs "connection" and "routine" (e.g. public.my_func).');
+                'DBViewer debug configuration needs "connection" and "routine" (e.g. public.my_func).');
             return undefined;
         }
         return config;
@@ -185,7 +185,7 @@ class PgDebugAdapter implements vscode.DebugAdapter {
     private async launch(): Promise<void> {
         const connStr = await this.store.get(this.config.connection);
         if (!connStr) {
-            this.fail(`Unknown connection "${this.config.connection}". Add it in the PGNet explorer.`);
+            this.fail(`Unknown connection "${this.config.connection}". Add it in the DBViewer explorer.`);
             return;
         }
         // pldbgapi is a PostgreSQL server extension; no other engine can be debugged
@@ -248,7 +248,7 @@ class PgDebugAdapter implements vscode.DebugAdapter {
 
     private fail(message: string): void {
         this.event('output', { category: 'stderr', output: message + '\n' });
-        vscode.window.showErrorMessage(`PGNet: ${message}`);
+        vscode.window.showErrorMessage(`DBViewer: ${message}`);
         this.event('terminated', {});
     }
 

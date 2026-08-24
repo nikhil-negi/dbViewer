@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { ConnectionStore } from './connections';
 import { providerInfo } from './providers';
 
-const FILE_MAP_KEY = 'pgnet.fileBindings';
-const LEGACY_MAP_KEY = 'pgnet.fileConnections';
+const FILE_MAP_KEY = 'dbviewer.fileBindings';
+const LEGACY_MAP_KEY = 'dbviewer.fileConnections';
 
 /** A file's execution context: which server, and (optionally) which schema to default to. */
 export interface FileBinding {
@@ -54,11 +54,11 @@ export class ConnectionContext implements vscode.Disposable {
         private readonly listSchemas: (connName: string) => Promise<string[]>,
     ) {
         this.connItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 91);
-        this.connItem.command = 'pgnet.setFileConnection';
-        this.connItem.name = 'PGNet Connection';
+        this.connItem.command = 'dbviewer.setFileConnection';
+        this.connItem.name = 'DBViewer Connection';
         this.schemaItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 90);
-        this.schemaItem.command = 'pgnet.setFileSchema';
-        this.schemaItem.name = 'PGNet Schema';
+        this.schemaItem.command = 'dbviewer.setFileSchema';
+        this.schemaItem.name = 'DBViewer Schema';
 
         this.disposables.push(
             this.connItem, this.schemaItem, this._onDidChange,
@@ -109,7 +109,7 @@ export class ConnectionContext implements vscode.Disposable {
 
         const names = this.store.names();
         if (names.length === 0) {
-            vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
+            vscode.window.showWarningMessage('DBViewer: add a connection first (DBViewer: Add Connection).');
             return undefined;
         }
         const connection = names.length === 1 ? names[0] : await this.pickConnection(doc);
@@ -124,7 +124,7 @@ export class ConnectionContext implements vscode.Disposable {
     async setConnectionForActiveEditor(): Promise<void> {
         const doc = this.activeSqlEditor()?.document;
         if (!isSqlDocument(doc)) {
-            vscode.window.showWarningMessage('PGNet: open a SQL file to set its connection.');
+            vscode.window.showWarningMessage('DBViewer: open a SQL file to set its connection.');
             return;
         }
         const connection = await this.pickConnection(doc);
@@ -138,7 +138,7 @@ export class ConnectionContext implements vscode.Disposable {
     async setSchemaForActiveEditor(): Promise<void> {
         const doc = this.activeSqlEditor()?.document;
         if (!isSqlDocument(doc)) {
-            vscode.window.showWarningMessage('PGNet: open a SQL file to set its schema.');
+            vscode.window.showWarningMessage('DBViewer: open a SQL file to set its schema.');
             return;
         }
         const binding = this.forDocument(doc);
@@ -188,7 +188,7 @@ export class ConnectionContext implements vscode.Disposable {
     private async pickConnection(doc: vscode.TextDocument | undefined): Promise<string | undefined> {
         const connections = this.store.list();
         if (connections.length === 0) {
-            vscode.window.showWarningMessage('PGNet: add a connection first (PGNet: Add Connection).');
+            vscode.window.showWarningMessage('DBViewer: add a connection first (DBViewer: Add Connection).');
             return undefined;
         }
         const current = this.forDocument(doc)?.connection;
@@ -212,7 +212,7 @@ export class ConnectionContext implements vscode.Disposable {
         let schemas: string[] = [];
         try {
             schemas = await vscode.window.withProgress(
-                { location: vscode.ProgressLocation.Window, title: `PGNet: loading schemas for ${connName}…` },
+                { location: vscode.ProgressLocation.Window, title: `DBViewer: loading schemas for ${connName}…` },
                 () => this.listSchemas(connName));
         } catch {
             // can't reach the server — let the user type one instead of blocking
@@ -269,7 +269,7 @@ export class ConnectionContext implements vscode.Disposable {
 
         if (!binding) {
             this.connItem.text = '$(database) Select connection';
-            this.connItem.tooltip = `PGNet: no connection bound to ${file} — click to choose one`;
+            this.connItem.tooltip = `DBViewer: no connection bound to ${file} — click to choose one`;
             this.connItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
             this.connItem.show();
             this.schemaItem.hide();

@@ -13,5 +13,5 @@ export async function handleExportMessage(msg: {
     });
     if (!uri) { return; }
     await vscode.workspace.fs.writeFile(uri, Buffer.from(msg.content, 'utf8'));
-    vscode.window.showInformationMessage(`PGNet: exported to ${uri.fsPath}`);
+    vscode.window.showInformationMessage(`DBViewer: exported to ${uri.fsPath}`);
 }

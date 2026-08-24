@@ -5,7 +5,7 @@ import * as path from 'path';
 import { ProviderId, buildConnectionString } from './providers';
 
 /**
- * Reads DBeaver's workspace configuration and turns its data sources into PGNet
+ * Reads DBeaver's workspace configuration and turns its data sources into DBViewer
  * connections.
  *
  * DBeaver keeps connections in `<workspace>/<project>/.dbeaver/data-sources.json`

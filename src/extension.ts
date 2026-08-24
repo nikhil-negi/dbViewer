@@ -36,12 +36,12 @@ async function promptRoutineArgs(node: PgNode): Promise<string[] | undefined> {
 /** Routine actions only apply to engines that can invoke a routine by name. */
 function requireRunnableRoutine(node?: PgNode): node is PgNode {
     if (!node || node.kind !== 'routine') {
-        vscode.window.showWarningMessage('PGNet: pick a function/procedure in the explorer.');
+        vscode.window.showWarningMessage('DBViewer: pick a function/procedure in the explorer.');
         return false;
     }
     if (!providerInfo(node.provider).supportsRunRoutine) {
         vscode.window.showWarningMessage(
-            `PGNet: running routines is not supported for ${providerInfo(node.provider).label}.`);
+            `DBViewer: running routines is not supported for ${providerInfo(node.provider).label}.`);
         return false;
     }
     return true;
@@ -82,7 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const tableViewer = new TableViewer(client, store, channel, columnPrefs);
     const editor = new ConnectionEditor(client, store, () => tree.refresh());
 
-    const treeView = vscode.window.createTreeView('pgnetExplorer', {
+    const treeView = vscode.window.createTreeView('dbExplorer', {
         treeDataProvider: tree, showCollapseAll: true,
     });
     // reflect the live filter text in the view header so type-to-filter is visible
@@ -111,24 +111,24 @@ export function activate(context: vscode.ExtensionContext): void {
     const command = (id: string, handler: (...args: any[]) => any) =>
         registerCommand(context, collisions, id, handler);
 
-    command('pgnet.connect', () => editor.openAdd());
+    command('dbViewer.connect', () => editor.openAdd());
 
-    command('pgnet.importDbeaver', async () => {
+    command('dbViewer.importDbeaver', async () => {
         if (await importFromDbeaver(store, connectionContext, names => editor.openEditQueue(names))) {
             tree.refresh();
         }
     });
 
-    command('pgnet.setCredentials', async (node?: PgNode) => {
+    command('dbViewer.editCredentials', async (node?: PgNode) => {
         const name = node?.connName ??
             await vscode.window.showQuickPick(store.names(), { placeHolder: 'Edit which connection?' });
         if (name) { editor.openEdit(name); }
     });
 
-    command('pgnet.testConnection', (node?: PgNode) =>
+    command('dbViewer.testConnection', (node?: PgNode) =>
         testConnection(client, store, node?.connName));
 
-    command('pgnet.removeConnection', async (node?: PgNode) => {
+    command('dbViewer.removeConnection', async (node?: PgNode) => {
         const name = node?.connName ??
             await vscode.window.showQuickPick(store.names(), { placeHolder: 'Remove which connection?' });
         if (!name) { return; }
@@ -137,10 +137,10 @@ export function activate(context: vscode.ExtensionContext): void {
         tree.refresh();
     });
 
-    command('pgnet.refresh', () => tree.refresh());
+    command('dbViewer.refresh', () => tree.refresh());
 
     // live tree filter: an input box that filters the explorer as you type
-    command('pgnet.filterExplorer', () => {
+    command('dbViewer.filterExplorer', () => {
         const input = vscode.window.createInputBox();
         input.title = 'Filter Explorer';
         input.placeholder = 'Type to filter tables, views, routines, types, schemas (fuzzy)…';
@@ -150,30 +150,30 @@ export function activate(context: vscode.ExtensionContext): void {
         input.onDidHide(() => input.dispose());
         input.show();
     });
-    command('pgnet.clearFilter', () => tree.setFilter(''));
+    command('dbViewer.clearFilter', () => tree.setFilter(''));
     // type-to-filter: the character keybindings (see package.json) drive these
-    command('pgnet.filterType', (ch?: string) => { if (typeof ch === 'string') { tree.appendToFilter(ch); } });
-    command('pgnet.filterBackspace', () => tree.backspaceFilter());
-    command('pgnet.openDefinition', (node: PgNode) =>
+    command('dbViewer.filterType', (ch?: string) => { if (typeof ch === 'string') { tree.appendToFilter(ch); } });
+    command('dbViewer.filterBackspace', () => tree.backspaceFilter());
+    command('dbViewer.openDefinition', (node: PgNode) =>
         node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node));
-    command('pgnet.runSelectedQuery', () => executor.runFromActiveEditor());
-    command('pgnet.cancelQuery', () => executor.cancel());
+    command('dbViewer.runSelectedQuery', () => executor.runFromActiveEditor());
+    command('dbViewer.cancelQuery', () => executor.cancel());
 
     // connection context: per-file connection + schema shown in the status bar
-    command('pgnet.setFileConnection', () => connectionContext.setConnectionForActiveEditor());
-    command('pgnet.setFileSchema', () => connectionContext.setSchemaForActiveEditor());
-    command('pgnet.selectConnection', () => connectionContext.setConnectionForActiveEditor());
-    command('pgnet.useConnectionForFile', async (node?: PgNode) => {
+    command('dbViewer.setFileConnection', () => connectionContext.setConnectionForActiveEditor());
+    command('dbViewer.setFileSchema', () => connectionContext.setSchemaForActiveEditor());
+    command('dbViewer.selectConnection', () => connectionContext.setConnectionForActiveEditor());
+    command('dbViewer.useConnectionForFile', async (node?: PgNode) => {
         const doc = connectionContext.activeSqlEditor()?.document;
         if (!node || !doc) {
-            vscode.window.showWarningMessage('PGNet: open a SQL file first.');
+            vscode.window.showWarningMessage('DBViewer: open a SQL file first.');
             return;
         }
         await connectionContext.bind(doc, { connection: node.connName });
-        vscode.window.showInformationMessage(`PGNet: this file now runs on "${node.connName}".`);
+        vscode.window.showInformationMessage(`DBViewer: this file now runs on "${node.connName}".`);
     });
 
-    command('pgnet.runRoutine', async (node?: PgNode) => {
+    command('dbViewer.runRoutine', async (node?: PgNode) => {
         if (!requireRunnableRoutine(node)) { return; }
         const literals = await promptRoutineArgs(node);
         if (literals === undefined) { return; }
@@ -183,11 +183,11 @@ export function activate(context: vscode.ExtensionContext): void {
         await executor.runSql(sql, node.connName);
     });
 
-    command('pgnet.debugRoutine', async (node?: PgNode) => {
+    command('dbViewer.debugRoutine', async (node?: PgNode) => {
         if (!requireRunnableRoutine(node)) { return; }
         if (!providerInfo(node.provider).supportsDebug) {
             vscode.window.showWarningMessage(
-                'PGNet: debugging is only available for PostgreSQL connections.');
+                'DBViewer: debugging is only available for PostgreSQL connections.');
             return;
         }
         const args = await promptRoutineArgs(node);
@@ -206,15 +206,15 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 /**
- * Every command id we own is already taken, so a second copy of PGNet is loaded —
+ * Every command id we own is already taken, so a second copy of DBViewer is loaded —
  * almost always a VSIX installed from an earlier build sitting alongside the
  * development build. Both copies contribute view buttons, and whichever registered
  * first handles the clicks, so commands added since that build appear "not found".
  */
 function warnAboutDuplicateInstall(collisions: string[]): void {
-    const id = 'nikhil.pgnet';
+    const id = 'nikhil.dbviewer';
     vscode.window.showWarningMessage(
-        `PGNet: ${collisions.length} command(s) were already registered by another copy of this ` +
+        `DBViewer: ${collisions.length} command(s) were already registered by another copy of this ` +
         'extension, so this copy is only partly active. Uninstall the duplicate and reload.',
         'Show installed extension', 'Copy uninstall command',
     ).then(choice => {
