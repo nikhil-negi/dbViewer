@@ -4,8 +4,8 @@
  * row + column selection, CSV/SQL export, and (table mode) infinite-scroll
  * pagination via 'loadMore' messages to the extension.
  */
-export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; ddl?: boolean }): string {
-    const cfg = JSON.stringify({ mode: opts.mode, tableName: opts.tableName ?? 'query_result', ddl: opts.ddl !== false });
+export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; ddl?: boolean; columns?: boolean }): string {
+    const cfg = JSON.stringify({ mode: opts.mode, tableName: opts.tableName ?? 'query_result', ddl: opts.ddl !== false, columns: opts.columns === true });
     return /* html */ `<!DOCTYPE html>
 <html>
 <head>
@@ -52,6 +52,7 @@ export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; dd
     <div class="tab" data-pane="messages">Messages</div>
     <div class="tab" data-pane="metrics">Metrics</div>
     <div class="spacer"></div>
+    <button id="pickCols" style="display:none" title="Choose which columns to show">Columns…</button>
     <button id="exportCsv">Export CSV</button>
     <button id="exportSql">Export SQL</button>
     <button id="clearSel">Clear selection</button>
@@ -91,6 +92,12 @@ export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; dd
     const ddltab = document.getElementById('ddltab');
     ddltab.style.display = '';
     ddltab.addEventListener('click', () => vscode.postMessage({ type: 'openDdl' }));
+  }
+
+  if (CFG.columns) {
+    const pickCols = document.getElementById('pickCols');
+    pickCols.style.display = '';
+    pickCols.addEventListener('click', () => vscode.postMessage({ type: 'pickColumns' }));
   }
 
   document.querySelectorAll('.tab[data-pane]').forEach(t => t.addEventListener('click', () => {
@@ -290,6 +297,13 @@ export function gridHtml(opts: { mode: 'query' | 'table'; tableName?: string; dd
 
   window.addEventListener('message', e => {
     const m = e.data;
+    if (m.type === 'columnInfo') {
+      const pickCols = document.getElementById('pickCols');
+      if (pickCols && m.selected !== undefined && m.total !== undefined) {
+        pickCols.textContent = m.selected < m.total ? ('Columns (' + m.selected + '/' + m.total + ')') : 'Columns…';
+      }
+      return;
+    }
     if (m.type === 'start') {
       running = true;
       if (m.reset !== false) { resetGrid(); messages.innerHTML = ''; metrics.innerHTML = ''; }

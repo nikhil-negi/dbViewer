@@ -216,6 +216,16 @@ public sealed class ClickHouseProvider : IDbProvider
     /// <summary>ClickHouse has no user-defined named types; the folder is not shown for it.</summary>
     public Task<TypeNode[]> GetTypes(string connStr, string schema) => Task.FromResult(Array.Empty<TypeNode>());
 
+    public async Task<ColumnInfo[]> GetColumns(string connStr, string schema, string table)
+    {
+        var rows = await Rows(Parse(connStr), $"""
+            SELECT name, type FROM system.columns
+            WHERE database = {Lit(schema)} AND table = {Lit(table)}
+            ORDER BY position
+            """);
+        return rows.Select(r => new ColumnInfo(Col(r, 0), Col(r, 1))).ToArray();
+    }
+
     public Task<string> GetTableDefinition(string connStr, string schema, string name) =>
         ShowCreate(connStr, schema, name);
 

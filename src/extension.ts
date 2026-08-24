@@ -11,6 +11,7 @@ import { PgDebugConfigurationProvider, PgDebugAdapterDescriptorFactory } from '.
 import { parseRoutineArgs, buildInvokeSql, userArgs } from './routineUtils';
 import { PgCompletionProvider } from './sqlCompletion';
 import { providerInfo } from './providers';
+import { ColumnPreferences } from './columnPreferences';
 import { importFromDbeaver, testConnection } from './connectionSetup';
 import { ConnectionEditor } from './connectionEditor';
 
@@ -77,13 +78,25 @@ export function activate(context: vscode.ExtensionContext): void {
     const docs = new PgDocumentProvider(client, store);
     const channel = new QueryChannel(client);
     const executor = new QueryExecutor(store, channel, connectionContext);
-    const tableViewer = new TableViewer(client, store, channel);
+    const columnPrefs = new ColumnPreferences(context);
+    const tableViewer = new TableViewer(client, store, channel, columnPrefs);
     const editor = new ConnectionEditor(client, store, () => tree.refresh());
+
+    const treeView = vscode.window.createTreeView('pgnetExplorer', {
+        treeDataProvider: tree, showCollapseAll: true,
+    });
+    // reflect the live filter text in the view header so type-to-filter is visible
+    tree.onDidChangeFilterText((text: string) => {
+        treeView.message = text.trim()
+            ? `Filtering: ${text}  —  type to refine, Backspace to edit, Esc to clear`
+            : undefined;
+    });
+    treeView.onDidChangeSelection(e => tree.setActiveConnection(e.selection[0]?.connName));
 
     context.subscriptions.push(
         client,
         connectionContext,
-        vscode.window.registerTreeDataProvider('pgnetExplorer', tree),
+        treeView,
         vscode.workspace.registerTextDocumentContentProvider(PG_SCHEME, docs),
         vscode.debug.registerDebugConfigurationProvider('pgsql', new PgDebugConfigurationProvider()),
         vscode.debug.registerDebugAdapterDescriptorFactory('pgsql',
@@ -125,6 +138,22 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     command('pgnet.refresh', () => tree.refresh());
+
+    // live tree filter: an input box that filters the explorer as you type
+    command('pgnet.filterExplorer', () => {
+        const input = vscode.window.createInputBox();
+        input.title = 'Filter Explorer';
+        input.placeholder = 'Type to filter tables, views, routines, types, schemas (fuzzy)…';
+        input.value = tree.filterText();
+        input.onDidChangeValue(v => tree.setFilter(v));
+        input.onDidAccept(() => input.hide());
+        input.onDidHide(() => input.dispose());
+        input.show();
+    });
+    command('pgnet.clearFilter', () => tree.setFilter(''));
+    // type-to-filter: the character keybindings (see package.json) drive these
+    command('pgnet.filterType', (ch?: string) => { if (typeof ch === 'string') { tree.appendToFilter(ch); } });
+    command('pgnet.filterBackspace', () => tree.backspaceFilter());
     command('pgnet.openDefinition', (node: PgNode) =>
         node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node));
     command('pgnet.runSelectedQuery', () => executor.runFromActiveEditor());

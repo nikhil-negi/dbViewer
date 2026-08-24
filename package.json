@@ -102,6 +102,24 @@
       {
         "command": "pgnet.openDefinition",
         "title": "PGNet: Open Definition"
+      },
+      {
+        "command": "pgnet.filterExplorer",
+        "title": "PGNet: Filter Explorer",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "pgnet.clearFilter",
+        "title": "PGNet: Clear Explorer Filter",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "pgnet.filterType",
+        "title": "PGNet: Filter — Type Character"
+      },
+      {
+        "command": "pgnet.filterBackspace",
+        "title": "PGNet: Filter — Delete Character"
       }
     ],
     "menus": {
@@ -117,9 +135,19 @@
           "group": "navigation@2"
         },
         {
-          "command": "pgnet.refresh",
+          "command": "pgnet.filterExplorer",
           "when": "view == pgnetExplorer",
           "group": "navigation@3"
+        },
+        {
+          "command": "pgnet.clearFilter",
+          "when": "view == pgnetExplorer && pgnet.filtered",
+          "group": "navigation@4"
+        },
+        {
+          "command": "pgnet.refresh",
+          "when": "view == pgnetExplorer",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [
@@ -175,6 +203,14 @@
         {
           "command": "pgnet.useConnectionForFile",
           "when": "false"
+        },
+        {
+          "command": "pgnet.filterType",
+          "when": "false"
+        },
+        {
+          "command": "pgnet.filterBackspace",
+          "when": "false"
         }
       ]
     },
@@ -184,6 +220,388 @@
         "key": "ctrl+enter",
         "mac": "cmd+enter",
         "when": "editorTextFocus && (editorLangId == sql || resourceScheme == pg-schema)"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "a",
+        "when": "focusedView == pgnetExplorer",
+        "args": "a"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+a",
+        "when": "focusedView == pgnetExplorer",
+        "args": "a"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "b",
+        "when": "focusedView == pgnetExplorer",
+        "args": "b"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+b",
+        "when": "focusedView == pgnetExplorer",
+        "args": "b"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "c",
+        "when": "focusedView == pgnetExplorer",
+        "args": "c"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+c",
+        "when": "focusedView == pgnetExplorer",
+        "args": "c"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "d",
+        "when": "focusedView == pgnetExplorer",
+        "args": "d"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+d",
+        "when": "focusedView == pgnetExplorer",
+        "args": "d"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "e",
+        "when": "focusedView == pgnetExplorer",
+        "args": "e"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+e",
+        "when": "focusedView == pgnetExplorer",
+        "args": "e"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "f",
+        "when": "focusedView == pgnetExplorer",
+        "args": "f"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+f",
+        "when": "focusedView == pgnetExplorer",
+        "args": "f"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "g",
+        "when": "focusedView == pgnetExplorer",
+        "args": "g"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+g",
+        "when": "focusedView == pgnetExplorer",
+        "args": "g"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "h",
+        "when": "focusedView == pgnetExplorer",
+        "args": "h"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+h",
+        "when": "focusedView == pgnetExplorer",
+        "args": "h"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "i",
+        "when": "focusedView == pgnetExplorer",
+        "args": "i"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+i",
+        "when": "focusedView == pgnetExplorer",
+        "args": "i"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "j",
+        "when": "focusedView == pgnetExplorer",
+        "args": "j"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+j",
+        "when": "focusedView == pgnetExplorer",
+        "args": "j"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "k",
+        "when": "focusedView == pgnetExplorer",
+        "args": "k"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+k",
+        "when": "focusedView == pgnetExplorer",
+        "args": "k"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "l",
+        "when": "focusedView == pgnetExplorer",
+        "args": "l"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+l",
+        "when": "focusedView == pgnetExplorer",
+        "args": "l"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "m",
+        "when": "focusedView == pgnetExplorer",
+        "args": "m"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+m",
+        "when": "focusedView == pgnetExplorer",
+        "args": "m"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "n",
+        "when": "focusedView == pgnetExplorer",
+        "args": "n"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+n",
+        "when": "focusedView == pgnetExplorer",
+        "args": "n"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "o",
+        "when": "focusedView == pgnetExplorer",
+        "args": "o"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+o",
+        "when": "focusedView == pgnetExplorer",
+        "args": "o"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "p",
+        "when": "focusedView == pgnetExplorer",
+        "args": "p"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+p",
+        "when": "focusedView == pgnetExplorer",
+        "args": "p"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "q",
+        "when": "focusedView == pgnetExplorer",
+        "args": "q"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+q",
+        "when": "focusedView == pgnetExplorer",
+        "args": "q"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "r",
+        "when": "focusedView == pgnetExplorer",
+        "args": "r"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+r",
+        "when": "focusedView == pgnetExplorer",
+        "args": "r"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "s",
+        "when": "focusedView == pgnetExplorer",
+        "args": "s"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+s",
+        "when": "focusedView == pgnetExplorer",
+        "args": "s"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "t",
+        "when": "focusedView == pgnetExplorer",
+        "args": "t"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+t",
+        "when": "focusedView == pgnetExplorer",
+        "args": "t"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "u",
+        "when": "focusedView == pgnetExplorer",
+        "args": "u"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+u",
+        "when": "focusedView == pgnetExplorer",
+        "args": "u"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "v",
+        "when": "focusedView == pgnetExplorer",
+        "args": "v"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+v",
+        "when": "focusedView == pgnetExplorer",
+        "args": "v"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "w",
+        "when": "focusedView == pgnetExplorer",
+        "args": "w"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+w",
+        "when": "focusedView == pgnetExplorer",
+        "args": "w"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "x",
+        "when": "focusedView == pgnetExplorer",
+        "args": "x"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+x",
+        "when": "focusedView == pgnetExplorer",
+        "args": "x"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "y",
+        "when": "focusedView == pgnetExplorer",
+        "args": "y"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+y",
+        "when": "focusedView == pgnetExplorer",
+        "args": "y"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "z",
+        "when": "focusedView == pgnetExplorer",
+        "args": "z"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "shift+z",
+        "when": "focusedView == pgnetExplorer",
+        "args": "z"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "0",
+        "when": "focusedView == pgnetExplorer",
+        "args": "0"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "1",
+        "when": "focusedView == pgnetExplorer",
+        "args": "1"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "2",
+        "when": "focusedView == pgnetExplorer",
+        "args": "2"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "3",
+        "when": "focusedView == pgnetExplorer",
+        "args": "3"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "4",
+        "when": "focusedView == pgnetExplorer",
+        "args": "4"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "5",
+        "when": "focusedView == pgnetExplorer",
+        "args": "5"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "6",
+        "when": "focusedView == pgnetExplorer",
+        "args": "6"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "7",
+        "when": "focusedView == pgnetExplorer",
+        "args": "7"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "8",
+        "when": "focusedView == pgnetExplorer",
+        "args": "8"
+      },
+      {
+        "command": "pgnet.filterType",
+        "key": "9",
+        "when": "focusedView == pgnetExplorer",
+        "args": "9"
+      },
+      {
+        "command": "pgnet.filterBackspace",
+        "key": "backspace",
+        "when": "focusedView == pgnetExplorer && pgnet.filtered"
+      },
+      {
+        "command": "pgnet.clearFilter",
+        "key": "escape",
+        "when": "focusedView == pgnetExplorer && pgnet.filtered"
       }
     ],
     "debuggers": [

@@ -144,9 +144,43 @@ public sealed class PostgresProvider : IDbProvider
         return list.ToArray();
     }
 
+    public async Task<ColumnInfo[]> GetColumns(string connStr, string schema, string table)
+    {
+        await using var conn = await Open(connStr);
+        const string sql = """
+            SELECT column_name,
+                   CASE WHEN character_maximum_length IS NOT NULL
+                        THEN data_type || '(' || character_maximum_length || ')'
+                        ELSE data_type END
+            FROM information_schema.columns
+            WHERE table_schema = @s AND table_name = @t
+            ORDER BY ordinal_position;
+            """;
+        await using var cmd = new NpgsqlCommand(sql, conn);
+        cmd.Parameters.AddWithValue("s", schema);
+        cmd.Parameters.AddWithValue("t", table);
+        var list = new List<ColumnInfo>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync()) list.Add(new ColumnInfo(r.GetString(0), r.GetString(1)));
+        return list.ToArray();
+    }
+
     public async Task<string> GetRoutineDefinition(string connStr, string schema, string name, uint oid)
     {
         await using var conn = await Open(connStr);
+        // filtered/search results carry no oid, so fall back to resolving it by name;
+        // ambiguous overloads resolve to the first by oid, which is good enough for a preview
+        if (oid == 0)
+        {
+            await using var resolve = new NpgsqlCommand("""
+                SELECT p.oid::int8 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                WHERE n.nspname = @s AND p.proname = @n ORDER BY p.oid LIMIT 1;
+                """, conn);
+            resolve.Parameters.AddWithValue("s", schema);
+            resolve.Parameters.AddWithValue("n", name);
+            if (await resolve.ExecuteScalarAsync() is long resolved) oid = (uint)resolved;
+            else return $"-- routine {schema}.{name} not found";
+        }
         await using var cmd = new NpgsqlCommand("SELECT pg_get_functiondef(@oid::oid);", conn);
         cmd.Parameters.AddWithValue("oid", (long)oid);
         return (string?)await cmd.ExecuteScalarAsync() ?? "-- definition not available";

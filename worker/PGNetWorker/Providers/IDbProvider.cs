@@ -38,6 +38,8 @@ public interface IDbProvider
     Task<TableNode[]> GetViews(string connStr, string schema);
     Task<RoutineNode[]> GetRoutines(string connStr, string schema);
     Task<TypeNode[]> GetTypes(string connStr, string schema);
+    /// <summary>Columns of one table/view, in declaration order — for the column selector.</summary>
+    Task<ColumnInfo[]> GetColumns(string connStr, string schema, string table);
 
     Task<string> GetTableDefinition(string connStr, string schema, string name);
     Task<string> GetViewDefinition(string connStr, string schema, string name);

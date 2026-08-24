@@ -23,6 +23,9 @@ public class CatalogHandler
     public Task<TypeNode[]> GetTypes(string provider, string connStr, string schema) =>
         ProviderRegistry.For(provider).GetTypes(connStr, schema);
 
+    public Task<ColumnInfo[]> GetColumns(string provider, string connStr, string schema, string table) =>
+        ProviderRegistry.For(provider).GetColumns(connStr, schema, table);
+
     public Task<string> GetTableDefinition(string provider, string connStr, string schema, string name) =>
         ProviderRegistry.For(provider).GetTableDefinition(connStr, schema, name);
 
