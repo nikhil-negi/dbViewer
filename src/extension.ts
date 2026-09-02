@@ -111,24 +111,24 @@ export function activate(context: vscode.ExtensionContext): void {
     const command = (id: string, handler: (...args: any[]) => any) =>
         registerCommand(context, collisions, id, handler);
 
-    command('dbViewer.connect', () => editor.openAdd());
+    command('dbviewer.connect', () => editor.openAdd());
 
-    command('dbViewer.importDbeaver', async () => {
+    command('dbviewer.importDbeaver', async () => {
         if (await importFromDbeaver(store, connectionContext, names => editor.openEditQueue(names))) {
             tree.refresh();
         }
     });
 
-    command('dbViewer.editCredentials', async (node?: PgNode) => {
+    command('dbviewer.editCredentials', async (node?: PgNode) => {
         const name = node?.connName ??
             await vscode.window.showQuickPick(store.names(), { placeHolder: 'Edit which connection?' });
         if (name) { editor.openEdit(name); }
     });
 
-    command('dbViewer.testConnection', (node?: PgNode) =>
+    command('dbviewer.testConnection', (node?: PgNode) =>
         testConnection(client, store, node?.connName));
 
-    command('dbViewer.removeConnection', async (node?: PgNode) => {
+    command('dbviewer.removeConnection', async (node?: PgNode) => {
         const name = node?.connName ??
             await vscode.window.showQuickPick(store.names(), { placeHolder: 'Remove which connection?' });
         if (!name) { return; }
@@ -137,10 +137,10 @@ export function activate(context: vscode.ExtensionContext): void {
         tree.refresh();
     });
 
-    command('dbViewer.refresh', () => tree.refresh());
+    command('dbviewer.refresh', () => tree.refresh());
 
     // live tree filter: an input box that filters the explorer as you type
-    command('dbViewer.filterExplorer', () => {
+    command('dbviewer.filterExplorer', () => {
         const input = vscode.window.createInputBox();
         input.title = 'Filter Explorer';
         input.placeholder = 'Type to filter tables, views, routines, types, schemas (fuzzy)…';
@@ -150,20 +150,20 @@ export function activate(context: vscode.ExtensionContext): void {
         input.onDidHide(() => input.dispose());
         input.show();
     });
-    command('dbViewer.clearFilter', () => tree.setFilter(''));
+    command('dbviewer.clearFilter', () => tree.setFilter(''));
     // type-to-filter: the character keybindings (see package.json) drive these
-    command('dbViewer.filterType', (ch?: string) => { if (typeof ch === 'string') { tree.appendToFilter(ch); } });
-    command('dbViewer.filterBackspace', () => tree.backspaceFilter());
-    command('dbViewer.openDefinition', (node: PgNode) =>
+    command('dbviewer.filterType', (ch?: string) => { if (typeof ch === 'string') { tree.appendToFilter(ch); } });
+    command('dbviewer.filterBackspace', () => tree.backspaceFilter());
+    command('dbviewer.openDefinition', (node: PgNode) =>
         node.kind === 'routine' ? openDefinition(node) : tableViewer.open(node));
-    command('dbViewer.runSelectedQuery', () => executor.runFromActiveEditor());
-    command('dbViewer.cancelQuery', () => executor.cancel());
+    command('dbviewer.runSelectedQuery', () => executor.runFromActiveEditor());
+    command('dbviewer.cancelQuery', () => executor.cancel());
 
     // connection context: per-file connection + schema shown in the status bar
-    command('dbViewer.setFileConnection', () => connectionContext.setConnectionForActiveEditor());
-    command('dbViewer.setFileSchema', () => connectionContext.setSchemaForActiveEditor());
-    command('dbViewer.selectConnection', () => connectionContext.setConnectionForActiveEditor());
-    command('dbViewer.useConnectionForFile', async (node?: PgNode) => {
+    command('dbviewer.setFileConnection', () => connectionContext.setConnectionForActiveEditor());
+    command('dbviewer.setFileSchema', () => connectionContext.setSchemaForActiveEditor());
+    command('dbviewer.selectConnection', () => connectionContext.setConnectionForActiveEditor());
+    command('dbviewer.useConnectionForFile', async (node?: PgNode) => {
         const doc = connectionContext.activeSqlEditor()?.document;
         if (!node || !doc) {
             vscode.window.showWarningMessage('DBViewer: open a SQL file first.');
@@ -173,7 +173,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.showInformationMessage(`DBViewer: this file now runs on "${node.connName}".`);
     });
 
-    command('dbViewer.runRoutine', async (node?: PgNode) => {
+    command('dbviewer.runRoutine', async (node?: PgNode) => {
         if (!requireRunnableRoutine(node)) { return; }
         const literals = await promptRoutineArgs(node);
         if (literals === undefined) { return; }
@@ -183,7 +183,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await executor.runSql(sql, node.connName);
     });
 
-    command('dbViewer.debugRoutine', async (node?: PgNode) => {
+    command('dbviewer.debugRoutine', async (node?: PgNode) => {
         if (!requireRunnableRoutine(node)) { return; }
         if (!providerInfo(node.provider).supportsDebug) {
             vscode.window.showWarningMessage(
