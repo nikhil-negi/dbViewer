@@ -40,6 +40,12 @@ export class PgDocumentProvider implements vscode.TextDocumentContentProvider {
         }
     }
 
+    /** Builds the DDL URI for a user-defined type (used by tree nodes and DDL links). */
+    static typeUri(connName: string, provider: string, schema: string, name: string): vscode.Uri {
+        const q = new URLSearchParams({ kind: 'type', oid: '', conn: connName, provider });
+        return vscode.Uri.parse(`${PG_SCHEME}://${connName}/${schema}/${name}.sql?${q.toString()}`);
+    }
+
     static uriFor(node: PgNode): vscode.Uri {
         const q = new URLSearchParams({
             kind: node.kind,

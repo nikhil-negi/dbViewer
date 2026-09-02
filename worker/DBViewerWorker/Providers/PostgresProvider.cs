@@ -147,14 +147,13 @@ public sealed class PostgresProvider : IDbProvider
     public async Task<ColumnInfo[]> GetColumns(string connStr, string schema, string table)
     {
         await using var conn = await Open(connStr);
+        // format_type() so the real type name shows (incl. user-defined types), not "USER-DEFINED"
         const string sql = """
-            SELECT column_name,
-                   CASE WHEN character_maximum_length IS NOT NULL
-                        THEN data_type || '(' || character_maximum_length || ')'
-                        ELSE data_type END
-            FROM information_schema.columns
-            WHERE table_schema = @s AND table_name = @t
-            ORDER BY ordinal_position;
+            SELECT a.attname, format_type(a.atttypid, a.atttypmod)
+            FROM pg_attribute a
+            WHERE a.attrelid = (quote_ident(@s) || '.' || quote_ident(@t))::regclass
+              AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum;
             """;
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue("s", schema);
@@ -200,13 +199,19 @@ public sealed class PostgresProvider : IDbProvider
     public async Task<string> GetTableDefinition(string connStr, string schema, string name)
     {
         await using var conn = await Open(connStr);
+        // format_type() yields the real type name — including user-defined enums/composites/
+        // domains (schema-qualified when outside search_path), varchar(n), numeric(p,s), arrays —
+        // where information_schema.columns.data_type would just say "USER-DEFINED".
         const string colSql = """
-            SELECT column_name, data_type,
-                   COALESCE(character_maximum_length::text, ''),
-                   is_nullable, COALESCE(column_default, '')
-            FROM information_schema.columns
-            WHERE table_schema = @s AND table_name = @n
-            ORDER BY ordinal_position;
+            SELECT a.attname,
+                   format_type(a.atttypid, a.atttypmod),
+                   a.attnotnull,
+                   COALESCE(pg_get_expr(ad.adbin, ad.adrelid), '')
+            FROM pg_attribute a
+            LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+            WHERE a.attrelid = (quote_ident(@s) || '.' || quote_ident(@n))::regclass
+              AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum;
             """;
         var sb = new StringBuilder();
         sb.AppendLine($"CREATE TABLE {schema}.{name} (");
@@ -218,12 +223,9 @@ public sealed class PostgresProvider : IDbProvider
             await using var r = await cmd.ExecuteReaderAsync();
             while (await r.ReadAsync())
             {
-                var type = r.GetString(1);
-                var len = r.GetString(2);
-                if (len.Length > 0 && type is "character varying" or "character") type += $"({len})";
-                var line = $"    {r.GetString(0)} {type}";
-                if (r.GetString(4).Length > 0) line += $" DEFAULT {r.GetString(4)}";
-                if (r.GetString(3) == "NO") line += " NOT NULL";
+                var line = $"    {r.GetString(0)} {r.GetString(1)}";
+                if (r.GetString(3).Length > 0) line += $" DEFAULT {r.GetString(3)}";
+                if (r.GetBoolean(2)) line += " NOT NULL";
                 cols.Add(line);
             }
         }

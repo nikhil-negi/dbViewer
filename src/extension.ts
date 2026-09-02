@@ -10,6 +10,7 @@ import { TableViewer } from './tableViewer';
 import { PgDebugConfigurationProvider, PgDebugAdapterDescriptorFactory } from './pgDebugProvider';
 import { parseRoutineArgs, buildInvokeSql, userArgs } from './routineUtils';
 import { PgCompletionProvider } from './sqlCompletion';
+import { TypeLinkProvider } from './typeLinkProvider';
 import { providerInfo } from './providers';
 import { ColumnPreferences } from './columnPreferences';
 import { importFromDbeaver, testConnection } from './connectionSetup';
@@ -105,6 +106,9 @@ export function activate(context: vscode.ExtensionContext): void {
             [{ language: 'sql' }, { scheme: 'pg-schema' }],
             new PgCompletionProvider(client, store, doc => connectionContext.forDocument(doc)?.connection),
             '.'),
+        // Ctrl/Cmd-click a user-defined type name in a DDL document to open its definition
+        vscode.languages.registerDocumentLinkProvider(
+            { scheme: 'pg-schema' }, new TypeLinkProvider(client, store)),
     );
 
     const collisions: string[] = [];
