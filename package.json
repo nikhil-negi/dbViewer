@@ -51,6 +51,11 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "dbviewer.refreshConnection",
+        "title": "Refresh Connection",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "dbviewer.runSelectedQuery",
         "title": "DBViewer: Run Query (selection or file)",
         "icon": "$(play)"
@@ -178,6 +183,11 @@
           "group": "inline@1"
         },
         {
+          "command": "dbviewer.refreshConnection",
+          "when": "view == dbExplorer && viewItem =~ /^(connection|schema|folder|table|view|routine|routineReadOnly|type)$/",
+          "group": "inline@9"
+        },
+        {
           "command": "dbviewer.debugRoutine",
           "when": "view == dbExplorer && viewItem == routine",
           "group": "inline@2"
@@ -207,6 +217,10 @@
         },
         {
           "command": "dbviewer.filterType",
+          "when": "false"
+        },
+        {
+          "command": "dbviewer.refreshConnection",
           "when": "false"
         },
         {
@@ -649,10 +663,15 @@
     ]
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "build:ui": "tsc -p ./",
+    "compile": "npm run compile:ext && npm run compile:webview",
+    "compile:ext": "tsc -p ./",
+    "compile:webview": "tsc -p webview-ui && node esbuild.mjs",
+    "watch:ext": "tsc -watch -p ./ --preserveWatchOutput",
+    "watch:webview": "node esbuild.mjs --watch",
+    "watch:webview-types": "tsc -p webview-ui --watch --preserveWatchOutput",
+    "build:ui": "tsc -p ./ && tsc -p webview-ui && node esbuild.mjs --production",
     "build:worker": "dotnet publish worker/DBViewerWorker -c Release -o worker/publish",
+    "build:worker:debug": "dotnet build worker/DBViewerWorker -c Debug",
     "build": "npm run build:ui && npm run build:worker",
     "package": "vsce package --allow-missing-repository",
     "build-worker": "npm run build:worker",
@@ -663,8 +682,13 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.24.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.5.0"
   }
 }

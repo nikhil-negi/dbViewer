@@ -3,7 +3,8 @@ import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
 import { QueryChannel, QuerySink, QueryComplete } from './queryChannel';
 import { PgNode } from './pgTreeView';
-import { gridHtml } from './webview/gridHtml';
+import { webviewHtml, webviewOptions } from './webview/webviewHtml';
+import type { GridColumn, GridFromWebview, GridInit, GridToWebview } from './webview/protocol';
 import { handleExportMessage } from './exportHelper';
 import { openDefinition } from './pgDocumentProvider';
 import { typeDetailSql } from './typeUtils';
@@ -38,6 +39,7 @@ export class TableViewer {
     private readonly panels = new Map<string, PanelState>();
 
     constructor(
+        private readonly extensionUri: vscode.Uri,
         private readonly client: DotNetClient,
         private readonly store: ConnectionStore,
         private readonly channel: QueryChannel,
@@ -73,13 +75,14 @@ export class TableViewer {
         const panel = vscode.window.createWebviewPanel(
             'dbviewerTable', title,
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
-            { enableScripts: true, retainContextWhenHidden: true });
-        panel.webview.html = gridHtml({ mode: 'table', tableName: title, columns: selectable });
+            webviewOptions(this.extensionUri));
+        const init: GridInit = { mode: 'table', tableName: title, ddl: true, columns: selectable };
+        panel.webview.html = webviewHtml(panel.webview, this.extensionUri, 'grid', init);
         const state: PanelState = { node, panel, provider, connStr, source: sourceFor(node), columns };
         this.panels.set(key, state);
         panel.onDidDispose(() => this.panels.delete(key));
 
-        panel.webview.onDidReceiveMessage(async (msg) => {
+        panel.webview.onDidReceiveMessage(async (msg: GridFromWebview) => {
             if (msg.type === 'export') { await handleExportMessage(msg); }
             else if (msg.type === 'loadMore') { await this.loadPage(state, msg.offset, false); }
             else if (msg.type === 'sort') {
@@ -109,7 +112,7 @@ export class TableViewer {
         if (all.length === 0) { return; }
 
         const current = state.columns ?? all.map(c => c.name);
-        const chosen = await pickColumns(`${node.schema}.${node.objectName}`, all, current);
+        const chosen = await pickColumns(this.extensionUri, `${node.schema}.${node.objectName}`, all, current);
         if (chosen === undefined) { return; } // cancelled
 
         state.columns = chosen.length === all.length ? undefined : chosen;
@@ -123,6 +126,14 @@ export class TableViewer {
     }
 
     private columnCache = new Map<string, ColumnInfo[]>();
+
+    /** Forgets cached column lists for a connection, so altered tables are re-read. */
+    invalidateConnection(connName: string): void {
+        for (const key of [...this.columnCache.keys()]) {
+            if (key.startsWith(`${connName}/`)) { this.columnCache.delete(key); }
+        }
+    }
+
     private async columnsOf(provider: ProviderId, connStr: string, node: PgNode): Promise<ColumnInfo[]> {
         const key = `${node.connName}/${node.schema}/${node.objectName}`;
         const hit = this.columnCache.get(key);
@@ -136,7 +147,7 @@ export class TableViewer {
     /** Tells the grid how many columns are shown vs total, for the toolbar label. */
     private postColumnInfo(state: PanelState): void {
         const all = this.columnCache.get(`${state.node.connName}/${state.node.schema}/${state.node.objectName}`);
-        state.panel.webview.postMessage({
+        post(state.panel, {
             type: 'columnInfo',
             selected: state.columns ? state.columns.length : (all ? all.length : undefined),
             total: all ? all.length : undefined,
@@ -146,17 +157,17 @@ export class TableViewer {
     private async loadPage(state: PanelState, offset: number, reset: boolean): Promise<void> {
         const panel = state.panel;
         const requestId = this.channel.newRequestId('t');
-        if (reset) { panel.webview.postMessage({ type: 'start', reset: true }); }
+        if (reset) { post(panel, { type: 'start', reset: true }); }
 
         let pageRows = 0;
         const channel = this.channel;
         const sink: QuerySink = {
-            onColumns: (columns) => panel.webview.postMessage({ type: 'columns', columns }),
-            onRows: (rows) => { pageRows += rows.length; panel.webview.postMessage({ type: 'rows', rows }); },
-            onNotice: (message) => panel.webview.postMessage({ type: 'notice', message }),
+            onColumns: (columns) => post(panel, { type: 'columns', columns: columns as GridColumn[] }),
+            onRows: (rows) => { pageRows += rows.length; post(panel, { type: 'rows', rows: rows as unknown[][] }); },
+            onNotice: (message) => post(panel, { type: 'notice', message }),
             onComplete: (result: QueryComplete) => {
                 channel.release(requestId);
-                panel.webview.postMessage({ type: 'complete', ...result, pageRows, pageSize: PAGE_SIZE });
+                post(panel, { type: 'complete', ...result, pageRows, pageSize: PAGE_SIZE });
             },
         };
         const projection = state.columns
@@ -168,6 +179,10 @@ export class TableViewer {
         const sql = `SELECT ${projection} FROM ${state.source}${order} LIMIT ${PAGE_SIZE} OFFSET ${offset};`;
         await this.channel.run(state.provider, state.connStr, sql, requestId, sink);
     }
+}
+
+function post(panel: vscode.WebviewPanel, message: GridToWebview): void {
+    void panel.webview.postMessage(message);
 }
 
 function sourceFor(node: PgNode): string {

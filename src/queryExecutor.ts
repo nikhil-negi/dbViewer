@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { ConnectionStore } from './connections';
 import { ConnectionContext, FileBinding } from './connectionContext';
 import { QueryChannel, QuerySink, QueryComplete } from './queryChannel';
-import { gridHtml } from './webview/gridHtml';
+import { webviewHtml, webviewOptions } from './webview/webviewHtml';
+import type { GridColumn, GridFromWebview, GridInit, GridToWebview } from './webview/protocol';
 import { handleExportMessage } from './exportHelper';
 import { ProviderId, providerInfo, quoteIdent, withDatabase } from './providers';
 import { paginableSelect } from './sqlText';
@@ -36,6 +37,7 @@ export class QueryExecutor {
     private page: PageState | undefined;
 
     constructor(
+        private readonly extensionUri: vscode.Uri,
         private readonly store: ConnectionStore,
         private readonly channel: QueryChannel,
         private readonly context: ConnectionContext,
@@ -144,8 +146,8 @@ export class QueryExecutor {
 
         let pageRows = 0;
         const sink: QuerySink = {
-            onColumns: (columns) => this.post({ type: 'columns', columns }),
-            onRows: (rows) => { pageRows += (rows as unknown[]).length; this.post({ type: 'rows', rows }); },
+            onColumns: (columns) => this.post({ type: 'columns', columns: columns as GridColumn[] }),
+            onRows: (rows) => { pageRows += rows.length; this.post({ type: 'rows', rows: rows as unknown[][] }); },
             onNotice: (message) => this.post({ type: 'notice', message }),
             onComplete: (result: QueryComplete) => {
                 this.channel.release(requestId);
@@ -158,7 +160,7 @@ export class QueryExecutor {
         await this.channel.run(provider, connStr, sql, requestId, sink);
     }
 
-    private post(message: unknown): void {
+    private post(message: GridToWebview): void {
         this.panel?.webview.postMessage(message);
     }
 
@@ -180,11 +182,12 @@ export class QueryExecutor {
         this.panelMode = wantMode;
         this.panel = vscode.window.createWebviewPanel(
             'dbviewerResults', 'DBViewer Results', { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-            { enableScripts: true, retainContextWhenHidden: true });
+            webviewOptions(this.extensionUri));
         this.panel.onDidDispose(() => { this.panel = undefined; this.panelMode = undefined; });
         // paginated results reuse the table grid (infinite scroll + sort) but have no DDL tab
-        this.panel.webview.html = gridHtml({ mode: wantMode, ddl: false });
-        this.panel.webview.onDidReceiveMessage(async (msg) => {
+        const init: GridInit = { mode: wantMode, tableName: 'query_result', ddl: false, columns: false };
+        this.panel.webview.html = webviewHtml(this.panel.webview, this.extensionUri, 'grid', init);
+        this.panel.webview.onDidReceiveMessage(async (msg: GridFromWebview) => {
             if (msg.type === 'export') { await handleExportMessage(msg); }
             else if (msg.type === 'loadMore' && this.page) { await this.loadPage(msg.offset, false); }
             else if (msg.type === 'sort' && this.page) {

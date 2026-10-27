@@ -50,10 +50,16 @@ public sealed class ClickHouseProvider : IDbProvider
     private static Endpoint Parse(string connStr)
     {
         var map = ConnStr.Parse(connStr);
-        var protocol = ConnStr.Get(map, "http", "Protocol", "Scheme").ToLowerInvariant();
-        if (protocol is not ("http" or "https")) protocol = protocol == "native" ? "http" : "http";
-        var defaultPort = protocol == "https" ? 8443 : 8123;
-        var port = int.TryParse(ConnStr.Get(map, "", "Port"), out var p) ? p : defaultPort;
+        var explicitPort = int.TryParse(ConnStr.Get(map, "", "Port"), out var p) ? p : (int?)null;
+        var protocol = ConnStr.Get(map, "", "Protocol", "Scheme").ToLowerInvariant();
+        if (protocol is not ("http" or "https"))
+        {
+            // no usable protocol given: infer TLS from the port or an SSL flag, since a TLS
+            // endpoint rejects plain HTTP ("plain HTTP request was sent to HTTPS port")
+            var ssl = ConnStr.Get(map, "", "SSL", "Secure", "UseSsl").ToLowerInvariant();
+            protocol = explicitPort is 443 or 8443 || ssl is "true" or "1" or "yes" ? "https" : "http";
+        }
+        var port = explicitPort ?? (protocol == "https" ? 8443 : 8123);
         return new Endpoint(
             protocol,
             ConnStr.Get(map, "localhost", "Host", "Server"),

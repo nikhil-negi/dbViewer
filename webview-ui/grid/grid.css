@@ -1,0 +1,35 @@
+.bar { display: flex; align-items: center; gap: 2px; padding: 4px 8px 0;
+       border-bottom: 1px solid var(--vscode-panel-border);
+       position: sticky; top: 0; background: var(--vscode-editor-background); z-index: 2; }
+.tab { padding: 4px 12px; cursor: pointer; border: 1px solid transparent; border-bottom: none;
+       border-radius: 4px 4px 0 0; }
+.tab.active { background: var(--vscode-tab-activeBackground); border-color: var(--vscode-panel-border); }
+.bar button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
+              padding: 3px 10px; margin: 0 2px 4px; font-size: 12px; }
+.bar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+.pane { display: none; padding: 8px; }
+.pane.active { display: block; }
+.mono { font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre-wrap; }
+.error { color: var(--vscode-errorForeground); }
+.status { font-size: 11px; opacity: 0.8; padding: 0 8px 4px; }
+
+.gridwrap { overflow: auto; max-height: calc(100vh - 80px); }
+table { border-collapse: collapse; font-size: 12px; font-family: var(--vscode-editor-font-family); user-select: text; }
+th, td { border: 1px solid var(--vscode-panel-border); padding: 2px 8px; text-align: left; white-space: nowrap;
+         max-width: 400px; overflow: hidden; text-overflow: ellipsis; }
+th { background: var(--vscode-editor-inactiveSelectionBackground); position: sticky; top: 0; cursor: pointer; }
+th.sorted { text-decoration: underline; }
+.rownum { background: var(--vscode-editor-inactiveSelectionBackground); cursor: pointer;
+          text-align: right; opacity: 0.7; user-select: none; }
+td.null { opacity: 0.5; font-style: italic; }
+tbody tr:nth-child(even) { background: var(--vscode-list-hoverBackground); }
+
+.t-num  { color: var(--vscode-charts-blue,   #569cd6); }
+.t-date { color: var(--vscode-charts-purple, #c586c0); }
+.t-bool { color: var(--vscode-charts-green,  #4ec9b0); }
+.t-uuid { color: var(--vscode-charts-yellow, #d7ba7d); }
+.t-json { color: var(--vscode-charts-orange, #ce9178); }
+
+tr.selrow td, th.selcol, td.selcol { background: var(--vscode-editor-selectionBackground) !important;
+                                      color: var(--vscode-editor-selectionForeground, inherit); }

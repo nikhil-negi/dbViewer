@@ -40,6 +40,9 @@ export class PgCompletionProvider implements vscode.CompletionItemProvider {
         private readonly connectionFor: (doc: vscode.TextDocument) => string | undefined,
     ) {}
 
+    /** Drops a connection's cached catalog so the next completion re-reads it. */
+    invalidate(connName: string): void { this.cache.delete(connName); }
+
     async provideCompletionItems(
         document: vscode.TextDocument, position: vscode.Position,
     ): Promise<vscode.CompletionItem[] | undefined> {

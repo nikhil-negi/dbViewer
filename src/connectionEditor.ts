@@ -1,17 +1,12 @@
 import * as vscode from 'vscode';
-import * as crypto from 'crypto';
 import { DotNetClient } from './dotnetClient';
 import { ConnectionStore } from './connections';
 import {
     PROVIDERS, ProviderId, isProviderId, providerInfo,
     fieldsFromConnectionString, connectionStringFromFields, ConnectionFields,
 } from './providers';
-
-/** What the webview form posts back on Test / Save. */
-interface EditorForm extends ConnectionFields {
-    name: string;
-    provider: string;
-}
+import type { EditorForm, EditorFromWebview, EditorLoad, EditorToWebview } from './webview/protocol';
+import { webviewHtml, webviewOptions } from './webview/webviewHtml';
 
 interface TestResult {
     success: boolean;
@@ -20,7 +15,7 @@ interface TestResult {
 }
 
 /**
- * A webview dialog for adding and editing connections: one labeled input per
+ * A webview dialog (React: webview-ui/connectionEditor) for adding and editing connections: one labeled input per
  * setting (type, host, port, database, username, password, …), a paste-to-fill
  * bar for whole connection strings, and an in-place Test button.
  *
@@ -30,13 +25,14 @@ interface TestResult {
 export class ConnectionEditor {
     private panel: vscode.WebviewPanel | undefined;
     private ready = false;
-    private pendingLoad: unknown;
+    private pendingLoad: EditorLoad | undefined;
     private mode: 'add' | 'edit' = 'add';
     private editing: string | undefined;
     private queue: string[] = [];
     private queueTotal = 0;
 
     constructor(
+        private readonly extensionUri: vscode.Uri,
         private readonly client: DotNetClient,
         private readonly store: ConnectionStore,
         private readonly onSaved: () => void,
@@ -84,11 +80,12 @@ export class ConnectionEditor {
             ? 'New Connection'
             : `Edit Connection — ${name}${progress ? ` (${progress})` : ''}`;
 
-        const load = {
+        const load: EditorLoad = {
             type: 'load', mode, name: name ?? '', provider, fields,
             existingNames: this.store.names(),
             inQueue: this.queue.length > 0 || this.queueTotal > 1,
             progress,
+            providers: Object.values(PROVIDERS).map(p => ({ id: p.id, label: p.label })),
         };
         if (this.ready) { this.post(load); } else { this.pendingLoad = load; }
         this.panel!.reveal();
@@ -100,14 +97,14 @@ export class ConnectionEditor {
         this.panel = vscode.window.createWebviewPanel(
             'dbviewerConnectionEditor', 'Connection',
             { viewColumn: vscode.ViewColumn.Active, preserveFocus: false },
-            { enableScripts: true, retainContextWhenHidden: true });
-        this.panel.webview.html = editorHtml();
+            webviewOptions(this.extensionUri));
+        this.panel.webview.html = webviewHtml(this.panel.webview, this.extensionUri, 'connectionEditor');
         this.panel.onDidDispose(() => {
             this.panel = undefined;
             this.ready = false;
             this.queue = [];
         });
-        this.panel.webview.onDidReceiveMessage(async (msg) => {
+        this.panel.webview.onDidReceiveMessage(async (msg: EditorFromWebview) => {
             switch (msg.type) {
                 case 'ready':
                     this.ready = true;
@@ -115,9 +112,9 @@ export class ConnectionEditor {
                     break;
                 case 'parse': this.fillFromString(String(msg.text ?? '')); break;
                 // live preview: assemble the exact string that would be saved
-                case 'preview': this.post({ type: 'connstr', value: this.assemble(msg.form as EditorForm).connStr }); break;
-                case 'test': await this.test(msg.form as EditorForm); break;
-                case 'save': await this.save(msg.form as EditorForm); break;
+                case 'preview': this.post({ type: 'connstr', value: this.assemble(msg.form).connStr }); break;
+                case 'test': await this.test(msg.form); break;
+                case 'save': await this.save(msg.form); break;
                 case 'cancel': this.advanceOrClose(); break;
             }
         });
@@ -192,262 +189,7 @@ export class ConnectionEditor {
         else { this.panel?.dispose(); }
     }
 
-    private post(message: unknown): void {
+    private post(message: EditorToWebview): void {
         void this.panel?.webview.postMessage(message);
     }
-}
-
-function editorHtml(): string {
-    const nonce = crypto.randomBytes(16).toString('base64');
-    const providerOptions = Object.values(PROVIDERS)
-        .map(p => `<option value="${p.id}">${p.label}</option>`)
-        .join('');
-    return /* html */ `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<style>
-  body { font-family: var(--vscode-font-family); color: var(--vscode-foreground);
-         margin: 0; display: flex; justify-content: center; }
-  .card { width: min(560px, 92vw); padding: 20px 24px 28px; }
-  h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
-  .subtitle { font-size: 12px; opacity: 0.75; margin-bottom: 16px; }
-
-  .pastebar { display: flex; gap: 6px; margin-bottom: 18px; }
-  .pastebar input { flex: 1; }
-  .hint { font-size: 11px; opacity: 0.6; margin: 4px 0 0; }
-
-  .grid { display: grid; grid-template-columns: 130px 1fr; gap: 10px 12px; align-items: center; }
-  label { font-size: 12px; text-align: right; opacity: 0.9; }
-  label .req { color: var(--vscode-errorForeground); }
-  input, select {
-    font-family: inherit; font-size: 13px; padding: 5px 8px; border-radius: 3px;
-    color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-    border: 1px solid var(--vscode-input-border, transparent); outline: none; width: 100%;
-    box-sizing: border-box;
-  }
-  input:focus, select:focus { border-color: var(--vscode-focusBorder); }
-  select { appearance: auto; }
-
-  .rule { grid-column: 1 / -1; border-top: 1px solid var(--vscode-panel-border);
-          margin: 6px 0 2px; }
-
-  .actions { display: flex; gap: 8px; margin-top: 20px; align-items: center; }
-  button { font-size: 13px; padding: 6px 14px; border: none; border-radius: 3px; cursor: pointer; }
-  button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-  button.primary:hover { background: var(--vscode-button-hoverBackground); }
-  button.secondary { background: var(--vscode-button-secondaryBackground);
-                     color: var(--vscode-button-secondaryForeground); }
-  button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
-  button:disabled { opacity: 0.5; cursor: default; }
-  .spacer { flex: 1; }
-
-  #status { margin-top: 14px; font-size: 12px; min-height: 18px; white-space: pre-wrap; }
-  #status.ok { color: var(--vscode-testing-iconPassed, #4ec9b0); }
-  #status.err { color: var(--vscode-errorForeground); }
-  #nameWarn { grid-column: 2; font-size: 11px; color: var(--vscode-editorWarning-foreground, #cca700);
-              display: none; margin-top: -6px; }
-  .pwwrap { display: flex; gap: 6px; align-items: stretch; }
-  .pwwrap input { flex: 1; }
-  .reveal { padding: 0 10px; font-size: 14px; line-height: 1;
-            background: var(--vscode-button-secondaryBackground);
-            color: var(--vscode-button-secondaryForeground); }
-  .reveal:hover { background: var(--vscode-button-secondaryHoverBackground); }
-  .reveal.on { outline: 1px solid var(--vscode-focusBorder); }
-  .connstr { margin-top: 18px; }
-  .connstr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-  .connstr-head label { text-align: left; font-size: 12px; opacity: 0.9; }
-  .tiny { padding: 2px 8px; font-size: 11px; }
-  #connstr { width: 100%; box-sizing: border-box; resize: vertical; font-size: 12px;
-             font-family: var(--vscode-editor-font-family); padding: 6px 8px; border-radius: 3px;
-             color: var(--vscode-input-foreground); background: var(--vscode-input-background);
-             border: 1px solid var(--vscode-input-border, transparent); outline: none;
-             word-break: break-all; opacity: 0.85; }
-</style>
-</head>
-<body>
-<div class="card">
-  <h2 id="title">New Connection</h2>
-  <div class="subtitle" id="subtitle">Fill in the server details, or paste a connection string below.</div>
-
-  <div class="pastebar">
-    <input id="paste" placeholder="host=...;port=...;database=...;uid=...;pwd=...   (paste to fill the form)">
-    <button class="secondary" id="fillBtn">Fill</button>
-  </div>
-
-  <div class="grid">
-    <label for="name">Name <span class="req">*</span></label>
-    <input id="name" placeholder="local-dev">
-    <div id="nameWarn">A connection with this name exists — saving will overwrite it.</div>
-
-    <label for="provider">Database type</label>
-    <select id="provider">${providerOptions}</select>
-
-    <div class="rule"></div>
-
-    <label for="host">Host <span class="req">*</span></label>
-    <input id="host" placeholder="localhost">
-
-    <label for="port">Port</label>
-    <input id="port" placeholder="5432">
-
-    <label for="database">Database</label>
-    <input id="database" placeholder="postgres">
-
-    <label for="username">Username</label>
-    <input id="username" placeholder="postgres">
-
-    <label for="password">Password</label>
-    <div class="pwwrap">
-      <input id="password" type="password" autocomplete="off">
-      <button type="button" id="revealPw" class="reveal" title="Show/hide password" aria-label="Show or hide password">👁</button>
-    </div>
-
-    <label for="protocol" class="ch-only">Protocol</label>
-    <select id="protocol" class="ch-only">
-      <option value="">http (default)</option>
-      <option value="https">https</option>
-    </select>
-
-    <label for="sslMode" class="pg-only">SSL mode</label>
-    <select id="sslMode" class="pg-only">
-      <option value="">server default</option>
-      <option value="Require">Require</option>
-      <option value="Prefer">Prefer</option>
-      <option value="Disable">Disable</option>
-    </select>
-
-    <label for="others">Other options</label>
-    <input id="others" placeholder="key=value;key2=value2  (optional)">
-  </div>
-
-  <div class="connstr">
-    <div class="connstr-head">
-      <label for="connstr">Connection string</label>
-      <button type="button" class="secondary tiny" id="copyConnstr">Copy</button>
-    </div>
-    <textarea id="connstr" readonly rows="2" spellcheck="false"
-              title="The exact connection string that will be saved (includes the password)"></textarea>
-  </div>
-
-  <div class="actions">
-    <button class="secondary" id="test">Test Connection</button>
-    <div class="spacer"></div>
-    <button class="secondary" id="cancel">Cancel</button>
-    <button class="primary" id="save">Save</button>
-  </div>
-  <div id="status"></div>
-</div>
-
-<script nonce="${nonce}">
-  const vscode = acquireVsCodeApi();
-  const $ = id => document.getElementById(id);
-  const FIELDS = ['host', 'port', 'database', 'username', 'password', 'protocol', 'sslMode', 'others'];
-  let existingNames = [];
-  let mode = 'add';
-
-  function form() {
-    const f = { name: $('name').value, provider: $('provider').value };
-    for (const k of FIELDS) f[k] = $(k).value;
-    return f;
-  }
-
-  // ask the host to assemble the exact string that would be saved, and show it
-  function refreshConnstr() { vscode.postMessage({ type: 'preview', form: form() }); }
-
-  function applyProvider() {
-    const ch = $('provider').value === 'clickhouse';
-    document.querySelectorAll('.ch-only').forEach(e => e.style.display = ch ? '' : 'none');
-    document.querySelectorAll('.pg-only').forEach(e => e.style.display = ch ? 'none' : '');
-    $('port').placeholder = ch ? '8123' : '5432';
-    $('database').placeholder = ch ? 'default' : 'postgres';
-    $('username').placeholder = ch ? 'default' : 'postgres';
-  }
-
-  function status(text, cls) {
-    const el = $('status');
-    el.textContent = text || '';
-    el.className = cls || '';
-  }
-
-  function updateNameWarn() {
-    $('nameWarn').style.display =
-      mode === 'add' && existingNames.includes($('name').value.trim()) ? '' : 'none';
-  }
-
-  $('revealPw').addEventListener('click', () => {
-    const pw = $('password');
-    const show = pw.type === 'password';
-    pw.type = show ? 'text' : 'password';
-    $('revealPw').classList.toggle('on', show);
-    pw.focus();
-  });
-  $('provider').addEventListener('change', () => { applyProvider(); refreshConnstr(); });
-  $('name').addEventListener('input', updateNameWarn);
-  // any field edit updates the generated connection string live
-  for (const k of FIELDS) $(k).addEventListener('input', refreshConnstr);
-  $('copyConnstr').addEventListener('click', () => {
-    const el = $('connstr'); el.select();
-    navigator.clipboard?.writeText(el.value).then(
-      () => status('Connection string copied.', 'ok'), () => {});
-  });
-  $('fillBtn').addEventListener('click', () => vscode.postMessage({ type: 'parse', text: $('paste').value }));
-  $('paste').addEventListener('keydown', e => {
-    if (e.key === 'Enter') vscode.postMessage({ type: 'parse', text: $('paste').value });
-  });
-  $('test').addEventListener('click', () => {
-    status('Testing connection…');
-    $('test').disabled = true;
-    vscode.postMessage({ type: 'test', form: form() });
-  });
-  $('save').addEventListener('click', () => vscode.postMessage({ type: 'save', form: form() }));
-  $('cancel').addEventListener('click', () => vscode.postMessage({ type: 'cancel' }));
-
-  window.addEventListener('message', e => {
-    const m = e.data;
-    if (m.type === 'load') {
-      mode = m.mode;
-      existingNames = m.existingNames || [];
-      $('title').textContent = m.mode === 'add' ? 'New Connection'
-        : 'Edit Connection — ' + m.name + (m.progress ? '  (' + m.progress + ')' : '');
-      $('subtitle').textContent = m.mode === 'add'
-        ? 'Fill in the server details, or paste a connection string below.'
-        : 'Update the details for this connection, or paste a connection string below.';
-      $('name').value = m.name;
-      $('name').disabled = m.mode === 'edit';
-      $('provider').value = m.provider;
-      for (const k of FIELDS) $(k).value = m.fields[k] || '';
-      $('password').value = m.fields.password || '';
-      $('password').type = 'password';
-      $('revealPw').classList.remove('on');
-      $('cancel').textContent = m.inQueue ? 'Skip' : 'Cancel';
-      $('paste').value = '';
-      applyProvider();
-      updateNameWarn();
-      refreshConnstr();
-      status('');
-      ($('name').disabled ? $('host') : $('name')).focus();
-    } else if (m.type === 'fill') {
-      for (const k of FIELDS) { if (m.fields[k]) $(k).value = m.fields[k]; }
-      if (m.provider) $('provider').value = m.provider;
-      applyProvider();
-      refreshConnstr();
-      status('Form filled from the pasted string.', 'ok');
-    } else if (m.type === 'connstr') {
-      $('connstr').value = m.value || '';
-    } else if (m.type === 'testResult') {
-      $('test').disabled = false;
-      status(m.message, m.success ? 'ok' : 'err');
-    } else if (m.type === 'saveResult') {
-      status(m.message, m.success ? 'ok' : 'err');
-    }
-  });
-
-  applyProvider();
-  vscode.postMessage({ type: 'ready' });
-</script>
-</body>
-</html>`;
 }

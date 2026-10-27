@@ -78,10 +78,12 @@ export function activate(context: vscode.ExtensionContext): void {
     const tree = new PgTreeViewProvider(client, store);
     const docs = new PgDocumentProvider(client, store);
     const channel = new QueryChannel(client);
-    const executor = new QueryExecutor(store, channel, connectionContext);
+    const executor = new QueryExecutor(context.extensionUri, store, channel, connectionContext);
     const columnPrefs = new ColumnPreferences(context);
-    const tableViewer = new TableViewer(client, store, channel, columnPrefs);
-    const editor = new ConnectionEditor(client, store, () => tree.refresh());
+    const tableViewer = new TableViewer(context.extensionUri, client, store, channel, columnPrefs);
+    const completion = new PgCompletionProvider(
+        client, store, doc => connectionContext.forDocument(doc)?.connection);
+    const editor = new ConnectionEditor(context.extensionUri, client, store, () => tree.refresh());
 
     const treeView = vscode.window.createTreeView('dbExplorer', {
         treeDataProvider: tree, showCollapseAll: true,
@@ -103,9 +105,7 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.debug.registerDebugAdapterDescriptorFactory('pgsql',
             new PgDebugAdapterDescriptorFactory(client, store)),
         vscode.languages.registerCompletionItemProvider(
-            [{ language: 'sql' }, { scheme: 'pg-schema' }],
-            new PgCompletionProvider(client, store, doc => connectionContext.forDocument(doc)?.connection),
-            '.'),
+            [{ language: 'sql' }, { scheme: 'pg-schema' }], completion, '.'),
         // Ctrl/Cmd-click a user-defined type name in a DDL document to open its definition
         vscode.languages.registerDocumentLinkProvider(
             { scheme: 'pg-schema' }, new TypeLinkProvider(client, store)),
@@ -142,6 +142,14 @@ export function activate(context: vscode.ExtensionContext): void {
     });
 
     command('dbviewer.refresh', () => tree.refresh());
+
+    // inline refresh on any node: reload that node's whole connection and drop its caches
+    command('dbviewer.refreshConnection', (node?: PgNode) => {
+        if (!node) { tree.refresh(); return; }
+        completion.invalidate(node.connName);
+        tableViewer.invalidateConnection(node.connName);
+        tree.refreshConnection(node.connName);
+    });
 
     // live tree filter: an input box that filters the explorer as you type
     command('dbviewer.filterExplorer', () => {

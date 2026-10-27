@@ -225,7 +225,7 @@ export async function scanDbeaver(): Promise<DbeaverScan> {
                     Username: creds.user,
                     Password: creds.password,
                     ...(provider === 'clickhouse'
-                        ? { Protocol: secure || port === '8443' ? 'https' : 'http' }
+                        ? { Protocol: secure || port === '8443' || port === '443' ? 'https' : 'http' }
                         : secure ? { 'SSL Mode': 'Require' } : {}),
                 }),
             });

@@ -42,6 +42,20 @@ dotnet build worker/DBViewerWorker
 
 Then press **F5** in VS Code (Run Extension). In dev, the extension finds the Debug build of the worker automatically; for packaging, `npm run build-worker` publishes it to `worker/publish/`.
 
+### Layout
+
+- `src/` — extension host code (compiled by `tsc` to `out/`).
+- `webview-ui/` — the React webviews (connection editor, column picker, results grid), bundled by `esbuild.mjs` to `out/webview-ui/`. Each view's messages to and from the host are typed in `src/webview/protocol.ts`, which both sides import.
+- `worker/` — the .NET worker that talks to the databases.
+
+### Debugging
+
+F5 starts the `watch` task (extension `tsc`, webview esbuild, webview type check) and launches an Extension Development Host:
+
+- **Extension code:** breakpoints in `src/**/*.ts` bind directly.
+- **Webviews:** breakpoints in `webview-ui/**/*.tsx` bind too (`debugWebviews` in `launch.json`). After editing a view, close and reopen its panel, or run *Developer: Reload Webviews*, to load the rebuilt bundle. *Developer: Open Webview Developer Tools* gives a Chrome DevTools fallback with the same source maps.
+- **Worker (C#):** launch **Run Extension (Debug worker)**, which builds the worker in Debug first. Trigger any database action, then run **Attach to Worker (.NET)** and pick the `dotnet … DBViewerWorker.dll` process. This needs the C# extension.
+
 ## Usage
 
 1. **Add a connection** — database icon in the activity bar → `+`. Pick the engine, name it, and paste a connection string. The string is stored in VS Code SecretStorage and verified before saving.

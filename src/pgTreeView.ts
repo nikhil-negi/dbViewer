@@ -100,6 +100,8 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
     private readonly catalogCache = new Map<string, CompletionCatalog>();
     /** The connection the user is working in, auto-expanded while filtering. */
     private activeConn: string | undefined;
+    /** Last connection node handed to the view per name, so one connection can be re-fetched alone. */
+    private readonly connNodes = new Map<string, PgNode>();
 
     constructor(private readonly client: DotNetClient, private readonly store: ConnectionStore) {}
 
@@ -116,6 +118,13 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
     refresh(): void {
         this.catalogCache.clear(); // pick up new/renamed objects
         this._onDidChange.fire(undefined);
+    }
+
+    /** Re-fetches everything under one connection (schemas, folders, objects). */
+    refreshConnection(connName: string): void {
+        this.catalogCache.delete(connName);
+        // the view only re-queries an element it was given, so fire the exact instance
+        this._onDidChange.fire(this.connNodes.get(connName));
     }
 
     /** Sets the whole filter text (from the input box or a clear). */
@@ -160,6 +169,7 @@ export class PgTreeViewProvider implements vscode.TreeDataProvider<PgNode> {
                                : vscode.TreeItemCollapsibleState.Collapsed);
                     n.description = providerInfo(c.provider).label;
                     n.id = `conn:${c.name}`; // stable id keeps expansion state across filter refreshes
+                    this.connNodes.set(c.name, n);
                     return n;
                 });
             }

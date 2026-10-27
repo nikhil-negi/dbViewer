@@ -2,12 +2,45 @@
   "version": "0.2.0",
   "configurations": [
     {
+      // Breakpoints work in src/**/*.ts (extension host) and webview-ui/**/*.tsx (webviews).
       "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"],
-      "preLaunchTask": "npm: compile"
+      "outFiles": ["${workspaceFolder}/out/**/*.js", "!**/node_modules/**"],
+      "sourceMaps": true,
+      "debugWebviews": true,
+      "rendererDebugOptions": {
+        // webview bundles load from the vscode-resource host; map them back to local files
+        "sourceMapPathOverrides": {
+          "https://file+.vscode-resource.vscode-cdn.net/*": "/*"
+        }
+      },
+      "preLaunchTask": "watch"
+    },
+    {
+      // Same, but first builds the worker in Debug so "Attach to Worker" hits C# breakpoints.
+      "name": "Run Extension (Debug worker)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+      "outFiles": ["${workspaceFolder}/out/**/*.js", "!**/node_modules/**"],
+      "sourceMaps": true,
+      "debugWebviews": true,
+      "rendererDebugOptions": {
+        "sourceMapPathOverrides": {
+          "https://file+.vscode-resource.vscode-cdn.net/*": "/*"
+        }
+      },
+      "preLaunchTask": "watch + worker"
+    },
+    {
+      // The worker starts on the first database call; pick the "dotnet ... DBViewerWorker.dll"
+      // process. Needs the C# extension (ms-dotnettools.csharp).
+      "name": "Attach to Worker (.NET)",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
     }
   ]
 }

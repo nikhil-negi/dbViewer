@@ -1,0 +1,41 @@
+/* Shared look for every DBViewer webview: VS Code theme variables only, so light,
+   dark and high-contrast themes all work without per-theme rules. */
+
+body {
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+button.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+button.primary:hover { background: var(--vscode-button-hoverBackground); }
+button.secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+button.secondary:hover { background: var(--vscode-button-secondaryHoverBackground); }
+button:disabled { opacity: 0.5; cursor: default; }
+
+input:not([type="checkbox"]), select, textarea {
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 3px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  outline: none;
+  box-sizing: border-box;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--vscode-focusBorder); }
+select { appearance: auto; }
+
+.spacer { flex: 1; }

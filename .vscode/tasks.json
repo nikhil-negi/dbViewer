@@ -2,11 +2,71 @@
   "version": "2.0.0",
   "tasks": [
     {
+      // default build (Cmd+Shift+B) and the debugger's preLaunchTask: all three watchers
+      "label": "watch",
+      "dependsOn": ["watch:ext", "watch:webview", "watch:webview-types"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "watch:ext",
+      "type": "npm",
+      "script": "watch:ext",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "presentation": { "group": "watch", "reveal": "never" }
+    },
+    {
+      "label": "watch:webview",
+      "type": "npm",
+      "script": "watch:webview",
+      "isBackground": true,
+      "presentation": { "group": "watch", "reveal": "never" },
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": "relative",
+        "pattern": [
+          { "regexp": "^✘ \\[ERROR\\] (.*)$", "message": 1 },
+          { "regexp": "^\\s+(.*):(\\d+):(\\d+):$", "file": 1, "line": 2, "column": 3 }
+        ],
+        "background": {
+          "activesBegin": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
+        }
+      }
+    },
+    {
+      // esbuild does not type-check; this surfaces webview type errors in the Problems panel
+      "label": "watch:webview-types",
+      "type": "npm",
+      "script": "watch:webview-types",
+      "isBackground": true,
+      "problemMatcher": "$tsc-watch",
+      "presentation": { "group": "watch", "reveal": "never" }
+    },
+    {
+      "label": "compile",
       "type": "npm",
       "script": "compile",
       "group": "build",
-      "problemMatcher": "$tsc",
-      "label": "npm: compile"
+      "problemMatcher": "$tsc"
+    },
+    {
+      // Debug build of the .NET worker; the extension prefers it when newer than worker/publish
+      "label": "build:worker:debug",
+      "type": "npm",
+      "script": "build:worker:debug",
+      "group": "build",
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "silent" }
+    },
+    {
+      "label": "watch + worker",
+      "dependsOn": ["build:worker:debug", "watch"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
     }
   ]
 }

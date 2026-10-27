@@ -1,0 +1,21 @@
+.wrap { display: flex; flex-direction: column; height: 100vh; }
+header { padding: 12px 16px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.controls { display: flex; gap: 10px; align-items: center; }
+.search { flex: 1; padding: 6px 8px; }
+.selall { display: flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap;
+          cursor: pointer; user-select: none; }
+.count { font-size: 11px; opacity: 0.7; margin-top: 6px; }
+
+.list { flex: 1; overflow: auto; padding: 6px 8px; }
+.row { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px; border-radius: 3px; cursor: pointer; }
+.row:hover { background: var(--vscode-list-hoverBackground); }
+.row input { margin: 0; align-self: center; }
+.name { font-family: var(--vscode-editor-font-family); font-size: 13px; }
+.name b { color: var(--vscode-textLink-foreground); font-weight: 700; }
+.type { font-size: 11px; opacity: 0.6; margin-left: auto; padding-left: 12px;
+        font-family: var(--vscode-editor-font-family); }
+.none { opacity: 0.6; font-size: 12px; padding: 12px; }
+
+footer { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--vscode-panel-border); }
+footer button { padding: 6px 16px; }

@@ -1,0 +1,36 @@
+body { display: flex; justify-content: center; }
+.card { width: min(560px, 92vw); padding: 20px 24px 28px; }
+h2 { font-size: 16px; font-weight: 600; margin: 0 0 2px; }
+.subtitle { font-size: 12px; opacity: 0.75; margin-bottom: 16px; }
+
+.pastebar { display: flex; gap: 6px; margin-bottom: 18px; }
+.pastebar input { flex: 1; }
+
+.grid { display: grid; grid-template-columns: 130px 1fr; gap: 10px 12px; align-items: center; }
+.grid label { font-size: 12px; text-align: right; opacity: 0.9; }
+.grid input, .grid select { width: 100%; }
+.req { color: var(--vscode-errorForeground); }
+.rule { grid-column: 1 / -1; border-top: 1px solid var(--vscode-panel-border); margin: 6px 0 2px; }
+.name-warn { grid-column: 2; font-size: 11px; margin-top: -6px;
+             color: var(--vscode-editorWarning-foreground, #cca700); }
+
+.pwwrap { display: flex; gap: 6px; align-items: stretch; }
+.pwwrap input { flex: 1; }
+.reveal { padding: 0 10px; font-size: 14px; line-height: 1;
+          background: var(--vscode-button-secondaryBackground);
+          color: var(--vscode-button-secondaryForeground); }
+.reveal:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.reveal.on { outline: 1px solid var(--vscode-focusBorder); }
+
+.connstr { margin-top: 18px; }
+.connstr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.connstr-head label { font-size: 12px; opacity: 0.9; }
+.tiny { padding: 2px 8px; font-size: 11px; }
+#connstr { width: 100%; resize: vertical; font-size: 12px; font-family: var(--vscode-editor-font-family);
+           padding: 6px 8px; word-break: break-all; opacity: 0.85; }
+
+.actions { display: flex; gap: 8px; margin-top: 20px; align-items: center; }
+
+.status { margin-top: 14px; font-size: 12px; min-height: 18px; white-space: pre-wrap; }
+.status.ok { color: var(--vscode-testing-iconPassed, #4ec9b0); }
+.status.err { color: var(--vscode-errorForeground); }
